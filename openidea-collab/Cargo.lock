@@ -108,7 +108,10 @@ dependencies = [
 name = "openidea-plugin-openidea-collab"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "openidea-plugin",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
