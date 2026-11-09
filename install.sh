@@ -174,9 +174,16 @@ run_step() {
         kill "$SPIN_PID" 2>/dev/null; wait "$SPIN_PID" 2>/dev/null; SPIN_PID=""
         printf "\r   ${R}✗${X}  ${D}[${STEP_N}/${STEP_TOTAL}]${X}  ${msg}             \n"
         echo
-        echo -e "   ${R}$(t err_title):${X} ${D}${LOG}${X}"
+        echo -e "   ${R}$(t err_title)${X}"
+        echo -e "   ${D}─────────────────────────────────────────────────${X}"
+        # Show last 20 lines of the log directly on screen
+        tail -20 "$LOG" 2>/dev/null | while IFS= read -r line; do
+            printf "   ${D}│${X} %s\n" "$line"
+        done
+        echo -e "   ${D}─────────────────────────────────────────────────${X}"
+        echo -e "   ${D}log completo: ${LOG}${X}"
         echo
-        exit $code
+        cursor_on; exit $code
     fi
 }
 
@@ -278,8 +285,10 @@ _do_rust() {
         # shellcheck source=/dev/null
         source "$HOME/.cargo/env"
     fi
-    # Only add target if not already present (avoids slow download on every run)
-    if ! rustup target list --installed 2>/dev/null | grep -q "^wasm32-wasip2"; then
+    # Check via filesystem — avoids slow rustup network lock
+    local sysroot
+    sysroot=$(rustup show home 2>/dev/null || echo "$HOME/.rustup")
+    if ! find "$sysroot/toolchains" -maxdepth 3 -name "wasm32-wasip2" -type d 2>/dev/null | grep -q .; then
         rustup target add wasm32-wasip2
     fi
 }
