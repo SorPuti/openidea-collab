@@ -2,3 +2,8 @@
 .superpowers/
 target/
 dist/
+*.pem
+*.oiplugin
+dist-release/
+openidea-plugins/
+.openidea/
