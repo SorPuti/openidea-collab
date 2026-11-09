@@ -2,69 +2,65 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Plugin Rust/WASM para OpenIDEA que permite colaboração em tempo real entre múltiplos desenvolvedores (e agentes), com sincronização CRDT de arquivos, presença e cursores.
+**Goal:** Plugin Rust/WASM para OpenIDEA que sincroniza arquivos entre colaboradores via HTTP REST, usando file-save events do IDE e polling do servidor.
 
-**Architecture:** Plugin WASM (openidea-collab) conecta via WebSocket a um servidor Rust autônomo (collab-server). O servidor mantém salas, documentos CRDT (diamond-types) e estado de presença. Protocolo JSON sobre WebSocket.
+**Architecture:** Plugin WASM escuta `file-saved`, POSTa texto completo ao collab-server. Background task faz long-poll de eventos do servidor e aplica mudanças remotas via `project.write-file`. Servidor Rust mantém salas, histórico de arquivos e faz merge CRDT (diamond-types) em conflitos.
 
-**Tech Stack:** Rust 1.80+, axum 0.8, tokio, diamond-types 1.0, serde_json, tokio-tungstenite, openidea-plugin CLI
+**Tech Stack:** Rust 2021, axum 0.8, tokio, diamond-types 1.0, serde_json, openidea_plugin SDK (git), openidea-plugin CLI
 
 **Spec:** `docs/superpowers/specs/2026-11-09-openidea-collab-design.md`
 
 ## Global Constraints
 
 - Rust edition 2021 em todos os crates
-- `cargo test` deve passar sem warnings em ambos os crates
-- Sem `unwrap()` em código de produção — usar `?` ou `anyhow`
-- Plugin declara capability `network: ["ws://localhost:4444"]` no `plugin.toml`
-- Servidor escuta em `0.0.0.0:4444` por padrão, configurável via env `COLLAB_PORT`
-- Room IDs: 8 chars alfanuméricos gerados com `rand`
+- `cargo test` deve passar sem warnings (`-D warnings`)
+- Sem `unwrap()` em código de produção — usar `?` ou `anyhow::bail!`
+- Plugin capabilities: `required = ["project.read", "project.write", "events", "storage"]`, `optional = ["net:localhost", "net.http:*"]`
+- Servidor em `0.0.0.0:4444` por padrão, `COLLAB_PORT` env override
+- Room IDs: 8 chars alfanuméricos (`rand::Rng::sample_iter(Alphanumeric).take(8)`)
 - User IDs: UUID v4
+- Long-poll timeout no servidor: 5000ms
+- Plugin polling interval: 3000ms entre tentativas
 
 ## Review Focus
 
-- **Edições concorrentes no mesmo arquivo**: duas ops chegam antes de cada cliente ver a do outro → ambas devem ser aplicadas sem perda; testar com dois clientes mock enviando simultaneamente
-- **Desconexão abrupta**: cliente fecha sem enviar `leave` → servidor deve limpar membro via `on_close` do WebSocket; testar derrubando a conexão
-- **Room inexistente no join**: cliente envia `ws://host/ws?room=ZZZZZZZZ` → servidor retorna close frame com código 4040; testar com room_id inválido
-- **Op duplicada (reconexão)**: cliente reconecta e reenvia op já aplicada → diamond-types deve deduplicar via agent/seq; testar replay
-- **Arquivo não aberto localmente**: servidor recebe `edit` para arquivo que nenhum membro abriu ainda → servidor cria DocState vazio; testar com file path novo
+- **Conflito simultâneo**: dois usuários salvam o mesmo arquivo antes de qualquer um receber o update do outro → servidor deve tentar 3-way merge via diamond-types; se falhar, retornar 409 com ambas versões; testar com dois clientes mock
+- **Desconexão sem DELETE**: cliente para de polling (crash) → servidor deve expirar membro após 30s sem heartbeat (implementar `last_seen` + cleanup task); testar travando o clock
+- **Room 404 em POST file**: cliente posta arquivo para room que foi deletada → servidor retorna 404; plugin mostra notificação de erro e para polling
+- **Write-file com editor aberto**: `project.write-file` falha se editor tem unsaved changes (`invalid`); plugin deve mostrar notificação e NÃO substituir silenciosamente; testar com `apply-edits` como fallback
+- **Cursor overflow**: `GET /events?cursor=999999` para room com 10 eventos → servidor retorna `{ events: [], next_cursor: 10 }`; testar limite superior
 
 ---
 
 ## Task 1: Bootstrap — Projetos e Git
 
 **Files:**
+- Create: `Cargo.toml` (workspace)
 - Create: `collab-server/Cargo.toml`
 - Create: `collab-server/src/main.rs` (stub)
 - Create: `openidea-collab/plugin.toml`
 - Create: `openidea-collab/Cargo.toml`
 - Create: `openidea-collab/src/lib.rs` (stub)
-- Create: `Cargo.toml` (workspace)
-- Create: `.gitignore`
 
 **Interfaces:**
-- Produces: workspace compilável com `cargo check` sem erros
+- Produces: workspace com `cargo check` passando sem erros
 
 - [ ] **Step 1: Verificar openidea-plugin instalado**
 
 ```bash
-openidea-plugin --version
+openidea-plugin --version 2>/dev/null || cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
 ```
 
-Se não instalado:
-```bash
-cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
-```
+Expected: versão impressa sem erro (instalação pode demorar ~5min)
 
-Expected: versão impressa sem erro
-
-- [ ] **Step 2: Scaffold do plugin**
+- [ ] **Step 2: Scaffold do plugin no worktree**
 
 ```bash
-cd /run/media/bugson/Work/Projetos/OpenIDEA
+cd /run/media/bugson/Work/Projetos/OpenIDEA/.worktrees/openidea-collab
 openidea-plugin new openidea-collab
 ```
 
-Expected: diretório `openidea-collab/` com `plugin.toml`, `Cargo.toml`, `src/lib.rs`
+Expected: `openidea-collab/plugin.toml`, `openidea-collab/Cargo.toml`, `openidea-collab/src/lib.rs`
 
 - [ ] **Step 3: Criar collab-server**
 
@@ -72,11 +68,7 @@ Expected: diretório `openidea-collab/` com `plugin.toml`, `Cargo.toml`, `src/li
 cargo new --bin collab-server
 ```
 
-Expected: `collab-server/Cargo.toml` e `collab-server/src/main.rs`
-
 - [ ] **Step 4: Criar workspace Cargo.toml**
-
-Criar `/run/media/bugson/Work/Projetos/OpenIDEA/Cargo.toml`:
 
 ```toml
 [workspace]
@@ -84,184 +76,163 @@ members = ["collab-server", "openidea-collab"]
 resolver = "2"
 ```
 
-- [ ] **Step 5: Git init e primeiro commit**
+- [ ] **Step 5: Ajustar openidea-collab/plugin.toml**
 
-```bash
-git init
-git add .
-git commit -m "chore: scaffold openidea-collab plugin e collab-server"
-```
-
----
-
-## Task 2: Protocolo Compartilhado (collab-proto)
-
-**Files:**
-- Create: `collab-proto/Cargo.toml`
-- Create: `collab-proto/src/lib.rs`
-- Create: `collab-proto/src/msg.rs`
-- Modify: `Cargo.toml` (workspace) — adicionar `collab-proto`
-
-**Interfaces:**
-- Produces:
-  - `collab_proto::msg::ClientMsg` — enum serde para msgs cliente→servidor
-  - `collab_proto::msg::ServerMsg` — enum serde para msgs servidor→cliente
-  - `collab_proto::msg::OpData` — struct `{ agent: String, ops: Vec<u8> }` (bytes diamond-types)
-  - `collab_proto::msg::MemberInfo` — `{ user_id: String, name: String, current_file: Option<String> }`
-
-- [ ] **Step 1: Escrever teste de serialização**
-
-Criar `collab-proto/tests/msg_roundtrip.rs`:
-
-```rust
-use collab_proto::msg::{ClientMsg, ServerMsg, OpData};
-
-#[test]
-fn edit_roundtrip() {
-    let msg = ClientMsg::Edit {
-        file: "src/main.rs".into(),
-        op: OpData { agent: "a1".into(), ops: vec![1, 2, 3] },
-    };
-    let json = serde_json::to_string(&msg).unwrap();
-    let back: ClientMsg = serde_json::from_str(&json).unwrap();
-    assert!(matches!(back, ClientMsg::Edit { .. }));
-}
-
-#[test]
-fn welcome_roundtrip() {
-    let msg = ServerMsg::Welcome {
-        user_id: "u1".into(),
-        members: vec![],
-    };
-    let json = serde_json::to_string(&msg).unwrap();
-    let back: ServerMsg = serde_json::from_str(&json).unwrap();
-    assert!(matches!(back, ServerMsg::Welcome { .. }));
-}
-```
-
-- [ ] **Step 2: Rodar para confirmar FAIL**
-
-```bash
-cargo test -p collab-proto 2>&1 | head -20
-```
-
-Expected: erro de compilação — `collab-proto` não existe ainda
-
-- [ ] **Step 3: Criar collab-proto/Cargo.toml**
+Substituir o conteúdo completo pelo abaixo (preservar o `wasm` path que o scaffold gerou):
 
 ```toml
-[package]
-name = "collab-proto"
+id = "ai.l0ng.openidea-collab"
+name = "OpenIDEA Collab"
 version = "0.1.0"
-edition = "2021"
+description = "Real-time collaboration for OpenIDEA: sync files between developers."
+authors = ["OpenIDEA Collab contributors"]
+license = "Apache-2.0"
+change-notes = "0.1.0 — first release: room creation, file sync, presence panel."
+categories = ["tools"]
+engines.openidea = "^1.0"
+wasm = "dist/plugin.wasm"
+activation = ["on-event:file-saved", "on-event:editor-focused", "on-command:*"]
 
-[dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+[capabilities]
+required = ["project.read", "project.write", "events", "storage"]
+optional = ["net:localhost", "net.http:*"]
+
+[[contributes.commands]]
+id = "create-room"
+title = "Collab: Create Room"
+category = "Collab"
+
+[[contributes.commands]]
+id = "join-room"
+title = "Collab: Join Room"
+category = "Collab"
+
+[[contributes.commands]]
+id = "leave-room"
+title = "Collab: Leave Room"
+category = "Collab"
+
+[[contributes.views]]
+id = "collab-panel"
+name = "Collaborators"
+icon = "users"
+location = "right"
 ```
 
-- [ ] **Step 4: Implementar collab-proto/src/lib.rs e msg.rs**
-
-`lib.rs`:
-```rust
-pub mod msg;
-```
-
-`msg.rs` — implementar os enums e structs com `#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]`. Cada variante usa `#[serde(tag = "t", rename_all = "snake_case")]`. Variantes de `ClientMsg`: `Edit { file, op }`, `Cursor { file, pos: u32 }`, `Presence { file }`, `Leave`. Variantes de `ServerMsg`: `Welcome { user_id, members: Vec<MemberInfo> }`, `MemberJoined { user_id, name }`, `MemberLeft { user_id }`, `Edit { user_id, file, op }`, `Cursor { user_id, file, pos: u32 }`, `PresenceUpdate { user_id, file }`, `ConflictWarn { file, users: Vec<String> }`.
-
-- [ ] **Step 5: Rodar testes**
+- [ ] **Step 6: cargo check**
 
 ```bash
-cargo test -p collab-proto
+cd /run/media/bugson/Work/Projetos/OpenIDEA/.worktrees/openidea-collab
+cargo check --workspace 2>&1 | tail -5
 ```
 
-Expected: 2 testes PASS
+Expected: sem erros de compilação (warnings OK neste ponto)
 
-- [ ] **Step 6: Adicionar ao workspace e commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-# Adicionar "collab-proto" em Cargo.toml workspace members
-git add collab-proto/ Cargo.toml
-git commit -m "feat: protocolo collab-proto com msgs serde"
+git add Cargo.toml collab-server/ openidea-collab/
+git commit -m "chore: scaffold workspace collab-server + openidea-collab plugin"
 ```
 
 ---
 
-## Task 3A: collab-server — WebSocket + Rooms
-
-> **Pode ser executado em paralelo com Task 3B após Task 2 concluída.**
+## Task 2: collab-server — HTTP REST + Rooms
 
 **Files:**
 - Modify: `collab-server/Cargo.toml`
 - Create: `collab-server/src/main.rs`
-- Create: `collab-server/src/server.rs`
+- Create: `collab-server/src/routes.rs`
 - Create: `collab-server/src/room.rs`
+- Create: `collab-server/src/events.rs`
 - Create: `collab-server/src/document.rs`
-- Create: `collab-server/src/state.rs`
-- Test: `collab-server/tests/room_test.rs`
+- Test: `collab-server/tests/server_test.rs`
 
 **Interfaces:**
-- Consumes: `collab_proto::msg::{ClientMsg, ServerMsg, MemberInfo, OpData}` (Task 2)
 - Produces:
-  - `state::AppState` — `Arc<Mutex<State>>` compartilhado pelo axum
-  - `room::Room` — `{ id: String, members: HashMap<String, Member>, docs: HashMap<String, DocState> }`
-  - `document::DocState::apply_op(op: &OpData) -> Result<()>` — aplica op CRDT ao log autoritativo; a op original é rebroadcastada sem transformação (diamond-types gerencia convergência via agent/seq)
+  - `room::Room { id, members: HashMap<String,Member>, files: HashMap<String,FileState>, events: EventStore }`
+  - `room::Member { user_id: String, name: String, current_file: Option<String>, last_seen: Instant }`
+  - `room::FileState { version: u64, text: String, last_user: String }`
+  - `events::EventStore::push(event: RoomEvent) -> u64` — returns event id
+  - `events::EventStore::since(cursor: u64, timeout_ms: u64) -> Vec<EventEnvelope>` — long-poll, blocks up to timeout_ms
+  - `document::merge3(base: &str, ours: &str, theirs: &str) -> Result<String, MergeError>` — diamond-types 3-way
+  - `routes::router(state: AppState) -> Router` — axum router with all endpoints
 
-- [ ] **Step 1: Escrever testes de room**
+- [ ] **Step 1: Escrever testes unitários de room e events**
 
-Criar `collab-server/tests/room_test.rs`:
+Criar `collab-server/tests/server_test.rs`:
 
 ```rust
-use collab_server::room::{Room, Member};
+use collab_server::room::{Member, Room};
+use collab_server::events::EventStore;
+use std::time::Instant;
 
 #[test]
 fn room_add_remove_member() {
-    let mut room = Room::new("r1".into());
-    room.add_member(Member { user_id: "u1".into(), name: "Ana".into(), current_file: None });
+    let mut room = Room::new("ABCD1234".into());
+    room.add_member(Member { user_id: "u1".into(), name: "Ana".into(),
+        current_file: None, last_seen: Instant::now() });
     assert_eq!(room.members.len(), 1);
     room.remove_member("u1");
     assert_eq!(room.members.len(), 0);
 }
 
 #[test]
-fn room_member_list() {
-    let mut room = Room::new("r1".into());
-    room.add_member(Member { user_id: "u1".into(), name: "Ana".into(), current_file: None });
-    room.add_member(Member { user_id: "u2".into(), name: "Bob".into(), current_file: None });
-    let list = room.member_list();
-    assert_eq!(list.len(), 2);
+fn event_store_cursor() {
+    let mut store = EventStore::new();
+    store.push(collab_server::events::RoomEvent::MemberJoined {
+        user_id: "u1".into(), name: "Ana".into() });
+    let events = store.since(0, 0);  // timeout_ms=0: return immediately
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].id, 0);
+    let empty = store.since(1, 0);
+    assert!(empty.is_empty());
 }
 
-// Review Focus: room inexistente → State retorna None
 #[test]
-fn state_missing_room_returns_none() {
-    use collab_server::state::State;
-    let state = State::new();
-    assert!(state.get_room("ZZZZZZZZ").is_none());
+fn event_store_cursor_overflow() {
+    let store = EventStore::new();
+    let events = store.since(999999, 0);
+    assert!(events.is_empty());
+}
+
+// Review Focus: member heartbeat expiry
+#[test]
+fn member_expired() {
+    use std::time::Duration;
+    let mut member = Member { user_id: "u1".into(), name: "Ana".into(),
+        current_file: None, last_seen: Instant::now() - Duration::from_secs(31) };
+    assert!(member.is_expired(30));
 }
 ```
 
 - [ ] **Step 2: Rodar para confirmar FAIL**
 
 ```bash
-cargo test -p collab-server 2>&1 | head -20
+cargo test -p collab-server 2>&1 | head -15
 ```
 
-- [ ] **Step 3: Adicionar dependências ao collab-server/Cargo.toml**
+Expected: erro de compilação — módulos não existem
+
+- [ ] **Step 3: Adicionar dependências collab-server/Cargo.toml**
 
 ```toml
+[package]
+name = "collab-server"
+version = "0.1.0"
+edition = "2021"
+
 [dependencies]
-axum = { version = "0.8", features = ["ws"] }
+axum = "0.8"
 tokio = { version = "1", features = ["full"] }
-tower = "0.5"
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
-rand = "0.8"
+rand = { version = "0.8", features = ["small_rng"] }
 anyhow = "1"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 diamond-types = "1.0"
-collab-proto = { path = "../collab-proto" }
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -269,19 +240,53 @@ tokio-test = "0.4"
 
 - [ ] **Step 4: Implementar room.rs**
 
-`room.rs` define `Member { user_id, name, current_file: Option<String> }` e `Room { id, members: HashMap<String, Member>, docs: HashMap<String, DocState> }`. Métodos: `new(id) -> Room`, `add_member(m)`, `remove_member(id: &str)`, `member_list() -> Vec<MemberInfo>`, `apply_edit(file: &str, op: &OpData) -> Result<OpData>` (delega a `DocState`).
+Struct `Member { user_id: String, name: String, current_file: Option<String>, last_seen: Instant }`. Método `is_expired(timeout_secs: u64) -> bool`. Struct `FileState { version: u64, text: String, last_user: String }`. Struct `Room { id: String, members: HashMap<String,Member>, files: HashMap<String,FileState>, events: EventStore }`. Métodos: `new(id) -> Room`, `add_member(m)`, `remove_member(uid: &str)`, `update_presence(uid: &str, file: Option<String>)`, `expire_members(timeout_secs: u64)`.
 
-- [ ] **Step 5: Implementar document.rs**
+- [ ] **Step 5: Implementar events.rs**
 
-`DocState` wraps `diamond_types::list_fuzzer::SimpleOpLog`. Método `apply_op(op: &OpData) -> Result<OpData>` desserializa os bytes, aplica ao log, serializa o resultado merged para broadcast.
+```rust
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RoomEvent {
+    FileUpdated { path: String, version: u64, user_id: String },
+    MemberJoined { user_id: String, name: String },
+    MemberLeft { user_id: String },
+    PresenceChanged { user_id: String, file: Option<String> },
+    ConflictWarn { path: String, user_a: String, user_b: String },
+}
 
-- [ ] **Step 6: Implementar state.rs**
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EventEnvelope { pub id: u64, pub event: RoomEvent }
 
-`State { rooms: HashMap<String, Room> }`. Funções: `create_room() -> String` (gera ID 8 chars), `get_room(id: &str) -> Option<&Room>`, `get_room_mut(id: &str) -> Option<&mut Room>`, `get_or_create_room(id: &str) -> &mut Room`.
+pub struct EventStore { events: Vec<EventEnvelope>, next_id: u64 }
+```
 
-- [ ] **Step 7: Implementar server.rs e main.rs**
+`EventStore::push(event) -> u64` incrementa `next_id`, armazena `EventEnvelope { id, event }`, retorna id. `EventStore::since(cursor: u64, timeout_ms: u64) -> Vec<EventEnvelope>` retorna todos os eventos com id >= cursor. Com `timeout_ms=0` retorna imediatamente. Com `timeout_ms>0` usa `std::thread::sleep(Duration::from_millis(min(timeout_ms, 5000)))` antes de retornar eventos — suficiente para o MVP.
 
-`server.rs`: handler axum `ws_handler(ws: WebSocketUpgrade, Query(params): Query<ConnParams>, State(state): State<AppState>) -> Response`. Lógica: add member → welcome → loop recv/send → on close remove member. `main.rs`: cria AppState, monta router `GET /ws` + `POST /room`, inicia `axum::serve` em `0.0.0.0:{COLLAB_PORT:-4444}`.
+Nota: produção usaria `tokio::sync::Notify` para long-poll sem sleep. MVP usa sleep simples.
+
+- [ ] **Step 6: Implementar document.rs**
+
+```rust
+pub enum MergeError { Conflict }
+pub fn merge3(base: &str, ours: &str, theirs: &str) -> Result<String, MergeError>
+```
+
+Usar `diamond_types::list_fuzzer::SimpleOpLog` para aplicar ops de `base→ours` e `base→theirs` e tentar merge. Se divergência não resolve, retornar `Err(MergeError::Conflict)`.
+
+- [ ] **Step 7: Implementar routes.rs e main.rs**
+
+`routes.rs` define `AppState = Arc<Mutex<HashMap<String, Room>>>` e handlers:
+- `POST /rooms` → gera room_id (8 chars Alphanumeric), insere Room, retorna `{"room_id":"..."}`
+- `GET /rooms/{id}` → retorna `{"room_id", "members":[...]}` ou 404
+- `POST /rooms/{id}/join` body `{"name":"..."}` → gera user_id UUID, `add_member`, retorna `{"user_id":"..."}`
+- `DELETE /rooms/{id}/members/{uid}` → `remove_member`, push MemberLeft event
+- `POST /rooms/{id}/files/{path}` body `{"user_id","version","text"}` → atualiza FileState, detecta conflito (se mesmo arquivo foi salvo por outro usuário na última janela de 5s), push FileUpdated ou ConflictWarn, retorna `{"event_id"}`
+- `GET /rooms/{id}/files/{path}` → retorna FileState atual
+- `GET /rooms/{id}/members` → retorna lista de membros
+- `GET /rooms/{id}/events` query `cursor: u64` → chama `events.since(cursor, 5000)`, retorna `{"events":[...],"next_cursor":N}`
+
+`main.rs` cria AppState, spawna task de limpeza de membros expirados (a cada 30s, `expire_members(30)`), inicia axum em `0.0.0.0:{COLLAB_PORT:-4444}`.
 
 - [ ] **Step 8: Rodar testes**
 
@@ -289,330 +294,302 @@ tokio-test = "0.4"
 cargo test -p collab-server
 ```
 
-Expected: testes de room PASS, build sem warnings
+Expected: 4 testes PASS
 
 - [ ] **Step 9: Commit**
 
 ```bash
 git add collab-server/
-git commit -m "feat: collab-server WebSocket com rooms e CRDT diamond-types"
+git commit -m "feat: collab-server REST API com rooms, events e merge CRDT"
 ```
 
 ---
 
-## Task 3B: openidea-collab — Plugin WASM (cliente)
+## Task 3: openidea-collab — Plugin Rust/WASM
 
-> **Pode ser executado em paralelo com Task 3A após Task 2 concluída.**
+> **Pode ser executado após Task 1 concluída; independente de Task 2 para testes unitários.**
 
 **Files:**
-- Modify: `openidea-collab/plugin.toml`
 - Modify: `openidea-collab/Cargo.toml`
 - Create: `openidea-collab/src/lib.rs`
 - Create: `openidea-collab/src/client.rs`
-- Create: `openidea-collab/src/room_state.rs`
-- Create: `openidea-collab/src/panel.rs`
-- Test: `openidea-collab/tests/client_test.rs`
+- Create: `openidea-collab/src/room.rs`
+- Create: `openidea-collab/src/sync.rs`
+- Create: `openidea-collab/src/presence.rs`
+- Test: `openidea-collab/tests/plugin_test.rs`
 
 **Interfaces:**
-- Consumes: `collab_proto::msg::{ClientMsg, ServerMsg}` (Task 2)
+- Consumes: `net.fetch` via `openidea_plugin::host::net`, `events` via `Event::FileSaved`, `project.read-file`/`write-file`, `views` tree
 - Produces:
-  - `client::CollabClient::connect(url: &str) -> Result<Self>`
-  - `client::CollabClient::send(&self, msg: ClientMsg) -> Result<()>`
-  - `room_state::RoomState` — estado local: `user_id, members, current_file`
-  - `panel::render_panel(state: &RoomState) -> String` — HTML do painel de presença
+  - `room::RoomState { room_id, user_id, name, server_url }` — estado local persistido via `storage`
+  - `client::CollabClient::post_file(path, version, text) -> Result<u64>` — POST ao servidor
+  - `client::CollabClient::poll_events(cursor: u64) -> Result<PollResult>` — GET events long-poll
+  - `presence::PresenceState::to_tree_items() -> Vec<TreeItem>` — para o view panel
+  - `sync::SyncState::on_file_saved(path: &str, text: &str) -> Result<()>` — envia arquivo ao servidor
 
-- [ ] **Step 1: Escrever testes do panel**
+- [ ] **Step 1: Escrever testes unitários de presence e room**
 
-Criar `openidea-collab/tests/client_test.rs`:
+Criar `openidea-collab/tests/plugin_test.rs`:
 
 ```rust
-use openidea_collab::room_state::{RoomState, PeerInfo};
-use openidea_collab::panel::render_panel;
+use openidea_collab::presence::{PresenceState, PeerPresence};
+use openidea_collab::room::RoomState;
 
 #[test]
-fn panel_shows_members() {
-    let mut state = RoomState::new("u1".into(), "Ana".into());
-    state.add_peer(PeerInfo { user_id: "u2".into(), name: "Bob".into(), file: Some("main.rs".into()) });
-    let html = render_panel(&state);
-    assert!(html.contains("Bob"));
-    assert!(html.contains("main.rs"));
+fn presence_to_tree_items() {
+    let mut state = PresenceState::new("u1".into(), "Ana".into());
+    state.update_peer("u2".into(), "Bob".into(), Some("src/main.rs".into()));
+    let items = state.to_tree_items();
+    assert!(items.iter().any(|i| i.label.contains("Bob")));
+    assert!(items.iter().any(|i| i.detail.as_deref() == Some("src/main.rs")));
 }
 
 #[test]
-fn panel_empty_room() {
-    let state = RoomState::new("u1".into(), "Ana".into());
-    let html = render_panel(&state);
-    assert!(html.contains("Nenhum colaborador"));
+fn presence_remove_peer() {
+    let mut state = PresenceState::new("u1".into(), "Ana".into());
+    state.update_peer("u2".into(), "Bob".into(), None);
+    state.remove_peer("u2");
+    let items = state.to_tree_items();
+    assert!(!items.iter().any(|i| i.label.contains("Bob")));
+}
+
+#[test]
+fn room_state_roundtrip() {
+    let rs = RoomState { room_id: "ABCD1234".into(), user_id: "u1".into(),
+        name: "Ana".into(), server_url: "http://localhost:4444".into() };
+    let json = serde_json::to_string(&rs).unwrap();
+    let back: RoomState = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.room_id, "ABCD1234");
 }
 ```
 
 - [ ] **Step 2: Rodar para confirmar FAIL**
 
 ```bash
-cargo test -p openidea-collab 2>&1 | head -20
+cargo test -p openidea-collab 2>&1 | head -15
 ```
 
-- [ ] **Step 3: Configurar plugin.toml**
-
-Atualizar `openidea-collab/plugin.toml`:
-```toml
-[plugin]
-name = "openidea-collab"
-version = "0.1.0"
-description = "Colaboração em tempo real para OpenIDEA"
-authors = ["Seu Nome"]
-
-[capabilities]
-network = ["ws://localhost:4444", "ws://*:4444"]
-
-[[commands]]
-name = "Create Room"
-id = "collab.create_room"
-
-[[commands]]
-name = "Join Room"
-id = "collab.join_room"
-
-[[commands]]
-name = "Leave Room"
-id = "collab.leave_room"
-
-[[panels]]
-name = "Collaborators"
-id = "collab.panel"
-position = "right"
-```
-
-- [ ] **Step 4: Adicionar dependências ao openidea-collab/Cargo.toml**
+- [ ] **Step 3: Adicionar dependências openidea-collab/Cargo.toml**
 
 ```toml
 [dependencies]
-collab-proto = { path = "../collab-proto" }
+# SDK — versão exata determinada pelo scaffold (manter a do scaffold)
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-diamond-types = "1.0"
 anyhow = "1"
-# WebSocket via WASM — usar a API do OpenIDEA para conexões de rede
+
+# O scaffold já inclui openidea_plugin; não adicionar duplicado.
+# Verificar que Cargo.toml gerado tem:
+# openidea_plugin = { git = "https://github.com/l0ng-ai/openidea", tag = "vX.Y.Z" }
 ```
 
-Nota: dentro de WASM/OpenIDEA, conexões de rede usam a API do host. Consultar `openidea_plugin::net::WebSocket` ou equivalente da API real do plugin após scaffold.
+Nota: o scaffold gera o Cargo.toml com o SDK. Adicionar apenas `serde`, `serde_json`, `anyhow`.
 
-- [ ] **Step 5: Implementar room_state.rs**
+- [ ] **Step 4: Implementar room.rs**
 
-`PeerInfo { user_id, name, file: Option<String> }`. `RoomState { user_id, name, room_id: Option<String>, members: HashMap<String, PeerInfo> }`. Métodos: `new(user_id, name)`, `add_peer(p)`, `remove_peer(uid)`, `update_file(uid, file)`.
+```rust
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RoomState { pub room_id: String, pub user_id: String,
+    pub name: String, pub server_url: String }
 
-- [ ] **Step 6: Implementar panel.rs**
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MemberInfo { pub user_id: String, pub name: String,
+    pub current_file: Option<String> }
+```
 
-`render_panel(state: &RoomState) -> String` — retorna HTML simples: lista `<ul>` com um `<li>` por peer mostrando nome e arquivo atual. Se `members` vazio, retorna div com "Nenhum colaborador".
+- [ ] **Step 5: Implementar presence.rs**
 
-- [ ] **Step 7: Implementar lib.rs**
+```rust
+#[derive(Debug, Clone)]
+pub struct PeerPresence { pub user_id: String, pub name: String,
+    pub current_file: Option<String> }
 
-Registrar comandos `collab.create_room`, `collab.join_room`, `collab.leave_room` via API do OpenIDEA. Registrar panel `collab.panel` chamando `render_panel`. Hooks de editor: `on_text_change` → serializa op CRDT → `CollabClient::send(ClientMsg::Edit {...})`. `on_receive(ServerMsg::Edit { op, .. })` → aplica op ao buffer local.
+pub struct PresenceState { pub self_id: String, pub self_name: String,
+    peers: std::collections::HashMap<String, PeerPresence> }
+```
 
-- [ ] **Step 8: Implementar client.rs**
+Métodos: `new(self_id, self_name)`, `update_peer(uid, name, file)`, `remove_peer(uid)`. `to_tree_items() -> Vec<openidea_plugin::TreeItem>` — um item por peer com `label = name`, `detail = current_file`, `key = user_id`.
 
-`CollabClient` wraps a WebSocket connection (via API do host OpenIDEA). `connect(url) -> Result<Self>`, `send(msg: ClientMsg) -> Result<()>`, `on_message(callback: Fn(ServerMsg))`.
+- [ ] **Step 6: Implementar client.rs**
 
-- [ ] **Step 9: Rodar testes**
+`CollabClient { server_url: String }`. Usa `openidea_plugin::host::net::fetch(request)` para HTTP.
+
+```rust
+pub struct PollResult {
+    pub events: Vec<serde_json::Value>,
+    pub next_cursor: u64,
+}
+
+impl CollabClient {
+    pub fn new(server_url: String) -> Self
+    pub fn create_room(&self) -> Result<String, anyhow::Error>  // → room_id
+    pub fn join_room(&self, room_id: &str, name: &str) -> Result<String, anyhow::Error>  // → user_id
+    pub fn leave_room(&self, room_id: &str, user_id: &str) -> Result<(), anyhow::Error>
+    pub fn post_file(&self, room_id: &str, user_id: &str, path: &str, version: u64, text: &str) -> Result<u64, anyhow::Error>  // → event_id
+    pub fn poll_events(&self, room_id: &str, cursor: u64) -> Result<PollResult, anyhow::Error>
+    pub fn get_members(&self, room_id: &str) -> Result<Vec<MemberInfo>, anyhow::Error>
+    pub fn get_file(&self, room_id: &str, path: &str) -> Result<(u64, String), anyhow::Error>  // → (version, text)
+}
+```
+
+Cada método usa `net::fetch` com timeout adequado (`post_file`: 5000ms, `poll_events`: 8000ms).
+
+- [ ] **Step 7: Implementar sync.rs**
+
+`SyncState { room: Option<RoomState>, presence: PresenceState, file_versions: HashMap<String,u64>, poll_cursor: u64 }`.
+
+Funções:
+- `load_from_storage() -> SyncState` — lê `room_state` do `storage::get`, desserializa
+- `save_to_storage(&self)` — `storage::set("room_state", json)`
+- `on_file_saved(&mut self, ctx: &Invocation, path: &str)` — lê texto via `ctx.project()?.read-file(path)`, POSTs ao servidor, atualiza `file_versions[path]`
+- `on_poll_tick(&mut self, ctx: &Invocation) -> Vec<ViewUpdate>` — chama `client.poll_events`, processa cada evento, retorna lista de views para atualizar
+
+- [ ] **Step 8: Implementar lib.rs**
+
+Implementa `Plugin` trait para `CollabPlugin { sync: SyncState, client: CollabClient }`.
+
+Métodos:
+- `run_command(id, ctx, arg)`: despacha para `create-room`, `join-room`, `leave-room`. `create-room` chama `client.create_room()`, mostra notification com room_id. `join-room` usa `host::ui::input("Room ID", None)` para pedir ID, chama `client.join_room`, salva estado. `leave-room` chama `client.leave_room`, limpa estado.
+- `handle_event(event, ctx)`: `Event::FileSaved(path)` → `sync.on_file_saved(ctx, &path)`. `Event::EditorFocused(path)` → atualiza presença via POST `/rooms/{id}/members/{uid}/presence`.
+- `view(id, ctx)` (view-provider): retorna `View { toolbar: vec![], body: Body::Tree(sync.presence.to_tree_items()), status: Some(format!("Room: {}", room_id)) }`.
+
+Scheduled event: na ativação, `events::subscribe("scheduled")` com período de 3s. Cada `Event::Scheduled` → `sync.on_poll_tick(ctx)` → aplica updates + atualiza view.
+
+- [ ] **Step 9: Rodar testes unitários**
 
 ```bash
 cargo test -p openidea-collab
 ```
 
-Expected: 2 testes PASS (panel_shows_members, panel_empty_room)
+Expected: 3 testes PASS
 
-- [ ] **Step 10: Build do plugin**
+- [ ] **Step 10: Build WASM**
 
 ```bash
-cd openidea-collab
+cd /run/media/bugson/Work/Projetos/OpenIDEA/.worktrees/openidea-collab/openidea-collab
 openidea-plugin build
 ```
 
-Expected: build WASM sem erros
+Expected: `dist/plugin.wasm` gerado sem erros
 
 - [ ] **Step 11: Commit**
 
 ```bash
 git add openidea-collab/
-git commit -m "feat: plugin openidea-collab com panel de presença e hooks de editor"
+git commit -m "feat: plugin openidea-collab com sync HTTP, presence panel e comandos"
 ```
 
 ---
 
-## Task 4: CRDT — Sincronização de Documento Bidirecional
+## Task 4: Integração e Scripts de Dev
 
-> **Depende de Task 3A e 3B concluídas.**
-
-**Files:**
-- Modify: `collab-server/src/document.rs`
-- Modify: `openidea-collab/src/client.rs`
-- Create: `collab-server/tests/crdt_sync_test.rs`
-
-**Interfaces:**
-- Consumes: `document::DocState::apply_op`, `CollabClient::send/receive`
-- Produces: sincronização convergente — dois clientes mock que editam simultaneamente chegam ao mesmo estado final
-
-- [ ] **Step 1: Escrever teste de convergência CRDT**
-
-Criar `collab-server/tests/crdt_sync_test.rs`:
-
-```rust
-use collab_server::document::DocState;
-use collab_proto::msg::OpData;
-
-#[test]
-fn concurrent_edits_converge() {
-    let mut doc_a = DocState::new();
-    let mut doc_b = DocState::new();
-
-    // A insere "hello" na posição 0
-    let op_a = doc_a.local_insert(0, "hello").unwrap();
-    // B insere "world" na posição 0 (antes de ver op_a)
-    let op_b = doc_b.local_insert(0, "world").unwrap();
-
-    // Troca de ops
-    doc_a.apply_op(&op_b).unwrap();
-    doc_b.apply_op(&op_a).unwrap();
-
-    // Ambos devem ter o mesmo texto (ordem CRDT determinística)
-    assert_eq!(doc_a.content(), doc_b.content());
-}
-
-#[test]
-fn replay_op_is_idempotent() {
-    let mut doc = DocState::new();
-    let op = doc.local_insert(0, "hi").unwrap();
-    doc.apply_op(&op).unwrap(); // replay
-    // Não deve duplicar conteúdo
-    assert_eq!(doc.content(), "hi");
-}
-```
-
-- [ ] **Step 2: Rodar para confirmar FAIL**
-
-```bash
-cargo test -p collab-server crdt_sync 2>&1 | head -20
-```
-
-- [ ] **Step 3: Completar DocState com local_insert e content**
-
-Adicionar a `document.rs`:
-- `DocState::new() -> Self` — inicializa `SimpleOpLog` com agent ID UUID
-- `local_insert(pos: usize, text: &str) -> Result<OpData>` — cria op local no log, serializa para `OpData`
-- `content() -> String` — retorna texto atual do documento
-- `apply_op(op: &OpData) -> Result<()>` — desserializa e merge no log (deduplicado pelo diamond-types)
-
-- [ ] **Step 4: Rodar testes CRDT**
-
-```bash
-cargo test -p collab-server
-```
-
-Expected: todos os testes PASS incluindo `concurrent_edits_converge` e `replay_op_is_idempotent`
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add collab-server/src/document.rs collab-server/tests/
-git commit -m "feat: CRDT bidirecional com convergência e idempotência via diamond-types"
-```
-
----
-
-## Task 5: Integração e Smoke Test
-
-> **Sequencial — depende de todas as tasks anteriores.**
+> **Sequencial — depende de Tasks 1, 2 e 3 concluídas.**
 
 **Files:**
+- Create: `scripts/dev-server.sh`
+- Create: `scripts/dev-plugin.sh`
 - Create: `collab-server/tests/integration_test.rs`
-- Create: `scripts/dev.sh`
 
 **Interfaces:**
-- Consumes: servidor rodando em `localhost:4444`, plugin linkado
+- Consumes: `collab-server` rodando em porta 4444, plugin buildado
 
-- [ ] **Step 1: Script de desenvolvimento**
+- [ ] **Step 1: Script servidor de dev**
 
-Criar `scripts/dev.sh`:
+Criar `scripts/dev-server.sh`:
 ```bash
 #!/usr/bin/env bash
 set -e
-echo "▶ Iniciando collab-server..."
-cargo run -p collab-server &
-SERVER_PID=$!
-trap "kill $SERVER_PID" EXIT
-sleep 1
-echo "▶ Buildando plugin..."
-cd openidea-collab && openidea-plugin build && openidea-plugin link
-echo "✓ Plugin linkado. Use Settings › Plugins › Reload no OpenIDEA."
-wait $SERVER_PID
+echo "▶ Compilando collab-server..."
+cargo build -p collab-server
+echo "▶ Iniciando collab-server em :4444..."
+RUST_LOG=info ./target/debug/collab-server
 ```
 
 ```bash
-chmod +x scripts/dev.sh
+chmod +x scripts/dev-server.sh
 ```
 
-- [ ] **Step 2: Teste de integração HTTP**
+- [ ] **Step 2: Script plugin de dev**
+
+Criar `scripts/dev-plugin.sh`:
+```bash
+#!/usr/bin/env bash
+set -e
+echo "▶ Buildando plugin WASM..."
+cd openidea-collab
+openidea-plugin build
+openidea-plugin link
+echo "✓ Plugin linkado. Use Settings › Plugins › Reload no OpenIDEA."
+```
+
+```bash
+chmod +x scripts/dev-plugin.sh
+```
+
+- [ ] **Step 3: Teste de integração HTTP**
 
 Criar `collab-server/tests/integration_test.rs`:
 
 ```rust
-// Requer servidor rodando — skip em CI sem flag
+// Requer servidor rodando — executar com: cargo test -p collab-server -- --ignored
 #[tokio::test]
-#[ignore]
-async fn create_room_via_http() {
-    let resp = reqwest::Client::new()
-        .post("http://localhost:4444/room")
+#[ignore = "requires running server on :4444"]
+async fn create_and_join_room() {
+    let client = reqwest::Client::new();
+    
+    // Criar sala
+    let resp = client.post("http://localhost:4444/rooms")
+        .send().await.unwrap();
+    assert_eq!(resp.status(), 201);
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let room_id = body["room_id"].as_str().unwrap();
+    assert_eq!(room_id.len(), 8);
+    
+    // Entrar na sala
+    let resp = client.post(format!("http://localhost:4444/rooms/{room_id}/join"))
+        .json(&serde_json::json!({"name": "TestUser"}))
         .send().await.unwrap();
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
-    assert!(body["room_id"].as_str().unwrap().len() == 8);
+    assert!(body["user_id"].as_str().is_some());
 }
 ```
 
-Adicionar `reqwest = { version = "0.12", features = ["json"] }` em `[dev-dependencies]` do `collab-server/Cargo.toml`.
-
-- [ ] **Step 3: cargo test completo**
-
-```bash
-cargo test --workspace
+Adicionar a `collab-server/Cargo.toml`:
+```toml
+[dev-dependencies]
+tokio-test = "0.4"
+reqwest = { version = "0.12", features = ["json"] }
 ```
 
-Expected: todos os testes unitários PASS; integração ignorada (marked `#[ignore]`)
-
-- [ ] **Step 4: Build final do plugin**
+- [ ] **Step 4: cargo test completo**
 
 ```bash
-cd openidea-collab
-openidea-plugin build
-openidea-plugin link
+cd /run/media/bugson/Work/Projetos/OpenIDEA/.worktrees/openidea-collab
+cargo test --workspace 2>&1 | tail -20
 ```
 
-Expected: sem erros de build WASM
+Expected: todos os testes unitários PASS; integration test ignorado
 
 - [ ] **Step 5: Commit final**
 
 ```bash
-git add scripts/ collab-server/tests/integration_test.rs
-git commit -m "feat: script de dev e smoke test de integração"
-```
-
-- [ ] **Step 6: Tag v0.1.0**
-
-```bash
+git add scripts/ collab-server/tests/integration_test.rs collab-server/Cargo.toml
+git commit -m "feat: scripts de dev e smoke test de integração"
 git tag v0.1.0
 ```
 
 ---
 
-## Parallelization Guide (para múltiplos agentes)
+## Parallelization Guide
 
 ```
 Sequência:
   Task 1 (Bootstrap)
-      └── Task 2 (Protocol)
-              ├── Task 3A (Server)   ← agente A
-              └── Task 3B (Plugin)   ← agente B
-                      └── Task 4 (CRDT — agente A ou B)
-                              └── Task 5 (Integration)
+      ├── Task 2 (Server)   ← agente A, pode começar após Task 1
+      └── Task 3 (Plugin)   ← agente B, pode começar após Task 1
+              └── Task 4 (Integração — agente A ou B, após Tasks 2 e 3)
 ```
 
-Tasks 3A e 3B podem ser despachadas em paralelo após Task 2 concluída.
+Tasks 2 e 3 podem ser despachadas em paralelo após Task 1 concluída.
+Seus testes unitários são independentes; Task 4 requer ambas completas.

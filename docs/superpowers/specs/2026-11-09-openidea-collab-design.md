@@ -1,79 +1,105 @@
-# openidea-collab — Design Spec
+# openidea-collab — Design Spec (v2)
 
 ## Goal
 
-Plugin para OpenIDEA que permite 2+ desenvolvedores (e agentes de IA) editarem o mesmo projeto simultaneamente em tempo real.
+Plugin para OpenIDEA que permite 2+ desenvolvedores (e agentes de IA) trabalharem no mesmo projeto com sincronização de arquivos em tempo (quase) real.
+
+## Plugin API Constraints (discovered from wit/)
+
+- **Network**: only `net.fetch` (HTTP). No WebSocket, no SSE.
+- **HTML view**: sandboxed, no network. Use tree/list views instead.
+- **Editor events**: `file-opened`, `file-saved`, `files-changed`. No keystroke-level events.
+- **Editor read/write**: `project.read-file(path)` / `project.write-file(path, text)`.
+- **Text edits**: `text-editor.apply-edits(version, edits)` — requires editor open.
+- **Background tasks**: long-running via `tasks` interface (60s budget per report).
 
 ## Architecture
 
 ```
-OpenIDEA Plugin (Rust/WASM)         collab-server (Rust)
-├── Commands panel                   ├── axum WebSocket server
-├── Presence sidebar                 ├── Room registry (HashMap)
-├── Editor hooks (capture/apply)     ├── diamond-types CRDT per file
-└── WebSocket client                 └── Presence broadcast
-        ↕ ws://host:4444/room/{id}
+OpenIDEA Plugin (WASM/Rust)         collab-server (Rust/axum)
+├── Commands panel                   ├── POST /rooms
+├── Presence panel (tree view)       ├── GET  /rooms/{id}
+├── On file-saved → POST full text   ├── POST /rooms/{id}/join
+├── Background task: long-poll       ├── DELETE /rooms/{id}/members/{uid}
+│   GET /rooms/{id}/events?cur=N     ├── POST /rooms/{id}/files/{path}
+│   → write-file if remote newer     ├── GET  /rooms/{id}/files/{path}
+└── Conflict notification            ├── GET  /rooms/{id}/events?cursor=N (long-poll)
+                                     └── GET  /rooms/{id}/members
 ```
 
-## Components
-
-### collab-server
-
-Standalone Rust binary. Manages rooms, documents, and presence.
-
-- **Room**: `id: String`, `members: Vec<Member>`, `docs: HashMap<String, DocState>`
-- **DocState**: wraps `diamond_types::list_fuzzer::SimpleOpLog` for each file
-- **WebSocket endpoint**: `ws://host:4444/ws?room={id}&user={name}`
-- **HTTP endpoint**: `POST /room` → creates room, returns `room_id`
-
-### openidea-collab (plugin)
-
-WASM plugin for OpenIDEA. Connects to collab-server via WebSocket.
-
-- **Commands**: Create Room, Join Room, Leave Room
-- **Panel**: "Collaborators" sidebar — list users + their current file
-- **Editor hooks**: on_text_change → send `EditMsg`; on_receive_edit → apply to buffer
-- **Cursors**: on_cursor_move → send `CursorMsg`; render remote cursors as colored overlays
-
-### collab-proto (shared crate)
-
-Serde message types used by both server and plugin.
-
-## Protocol (JSON over WebSocket)
+## HTTP REST API
 
 ```
-Client → Server:
-  { "t": "edit",    "file": "src/main.rs", "op": <OpData> }
-  { "t": "cursor",  "file": "src/main.rs", "pos": 42 }
-  { "t": "presence","file": "src/main.rs" }
-  { "t": "leave" }
-
-Server → Client:
-  { "t": "welcome",         "user_id": "u1", "members": [...] }
-  { "t": "member_joined",   "user_id": "u2", "name": "Ana" }
-  { "t": "member_left",     "user_id": "u2" }
-  { "t": "edit",            "user_id": "u2", "file": "...", "op": <OpData> }
-  { "t": "cursor",          "user_id": "u2", "file": "...", "pos": 42 }
-  { "t": "presence_update", "user_id": "u2", "file": "..." }
-  { "t": "conflict_warn",   "file": "...", "users": ["u1","u2"] }
+POST   /rooms                           → 201 { room_id: "ABCD1234" }
+GET    /rooms/{id}                      → 200 { room_id, members:[...] } | 404
+POST   /rooms/{id}/join                 → 200 { user_id } | 404
+  body: { name: "Ana" }
+DELETE /rooms/{id}/members/{user_id}    → 204 | 404
+POST   /rooms/{id}/files/{path}         → 200 { event_id } | 409 ConflictWarn
+  body: { user_id, version: N, text: "..." }
+GET    /rooms/{id}/files/{path}         → 200 { version: N, text: "...", user_id } | 404
+GET    /rooms/{id}/members              → 200 [{ user_id, name, current_file? }]
+GET    /rooms/{id}/events?cursor=N      → 200 { events:[...], next_cursor: M }
+  events: { id, type, payload }
+  types: file_updated | member_joined | member_left | presence_changed | conflict_warn
+  long-poll: holds up to 5s when no events; cursor=0 for all history
 ```
 
-## OpData (diamond-types)
+## Sync Protocol
 
-Serialized as the base64-encoded bytes of `diamond_types` merge data. Server holds the authoritative doc; clients send their local ops and receive the server-merged result.
+1. User opens file → plugin notes current version, subscribes to `file-saved`
+2. User saves file → plugin `read-file` → `POST /rooms/{id}/files/{path}` with version+text
+3. Background task polls `GET /rooms/{id}/events?cursor=N` (5s long-poll timeout)
+4. On `file_updated` event: compare remote version with local → if remote newer, `write-file`
+5. On `conflict_warn`: show notification "Conflict in {file} with {user}"
 
-## MVP Scope
+## Conflict Detection
 
-1. Create room (server generates ID) + copy invite link
-2. Join room by ID
-3. Presence panel: who is connected, which file they're viewing
-4. File edit sync: capture changes via editor hook, apply remote ops
-5. Conflict warning when two users edit same line simultaneously
+Server detects conflict when:
+- File version in POST doesn't match the server's last-known-remote-version for that (room, path, user)
+- Two different users POST the same file within the same event window
+
+On conflict: server applies diamond-types 3-way merge (base=last shared text, theirs=remote, mine=local). If merge clean → returns merged text in response. If merge fails → returns 409 with both versions; plugin shows notification.
+
+## Plugin Structure
+
+```
+openidea-collab/
+├── plugin.toml
+├── Cargo.toml
+└── src/
+    ├── lib.rs          # Plugin trait impl: commands, events, view-provider
+    ├── client.rs       # HTTP client wrappers (net.fetch)
+    ├── sync.rs         # Sync loop (background task), file version tracking
+    ├── presence.rs     # Presence state + tree view rendering
+    └── room.rs         # Room state: room_id, user_id, members
+```
+
+## Server Structure
+
+```
+collab-server/
+├── Cargo.toml
+└── src/
+    ├── main.rs         # axum router + AppState
+    ├── routes.rs       # All route handlers
+    ├── room.rs         # Room, Member, FileState
+    ├── document.rs     # DocState (diamond-types merge)
+    └── events.rs       # EventStore (append-only, cursor-indexed)
+```
+
+## plugin.toml capabilities
+
+```toml
+[capabilities]
+required = ["project.read", "project.write", "events", "storage"]
+optional = ["net:localhost", "net.http:*"]
+```
 
 ## Success Criteria
 
-- Two OpenIDEA windows on same machine can co-edit a file
-- Edits converge (no data loss) after concurrent changes
-- Panel updates within 200ms of a member joining/leaving
-- Build passes `cargo test` on both crates
+- Two OpenIDEA instances can co-edit a file: save on A → B sees update within 10s
+- Conflict on same file → notification with both versions
+- Presence panel shows current file per member
+- `cargo test` passes on both crates
 - Plugin loads via `openidea-plugin link` without errors
