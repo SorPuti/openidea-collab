@@ -352,11 +352,30 @@ _do_server() {
 
 _do_plugin() {
     mkdir -p "$PLUGIN_DIR"
-    local url="https://github.com/$REPO/releases/latest/download/plugin.tar.gz"
-    if curl -fsSL --max-time 60 "$url" | tar -xz -C "$PLUGIN_DIR"; then
+
+    # If running from a local checkout, build from local source directly
+    # This avoids a race with GitHub CI when running the script from the repo
+    local script_dir; script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$script_dir/openidea-collab/plugin.toml" ]; then
+        rm -rf "$PLUGIN_DIR"
+        mkdir -p "$PLUGIN_DIR"
+        cp -r "$script_dir/openidea-collab/." "$PLUGIN_DIR/"
+        COLLAB_DEV=1 openidea-plugin build "$PLUGIN_DIR"
         return 0
     fi
-    # Fallback: build from source
+
+    # Remote install: try pre-built binary from GitHub Releases
+    local url="https://github.com/$REPO/releases/latest/download/plugin.tar.gz"
+    local tmp; tmp=$(mktemp)
+    if curl -fsSL --max-time 60 "$url" -o "$tmp" && \
+       tar -xzf "$tmp" -C "$PLUGIN_DIR" && \
+       [ -f "$PLUGIN_DIR/plugin.toml" ] && [ -f "$PLUGIN_DIR/dist/plugin.wasm" ]; then
+        rm -f "$tmp"
+        return 0
+    fi
+    rm -f "$tmp"
+
+    # Fallback: clone and build from source
     _ensure_src
     cp -r "$SRC_DIR/openidea-collab/." "$PLUGIN_DIR/"
     COLLAB_DEV=1 openidea-plugin build "$PLUGIN_DIR"
