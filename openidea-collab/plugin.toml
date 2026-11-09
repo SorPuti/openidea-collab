@@ -1,4 +1,4 @@
-id = "ai.l0ng.openidea-collab"
+id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
 version = "0.1.0"
 description = "Real-time collaboration for OpenIDEA: sync files between developers."
