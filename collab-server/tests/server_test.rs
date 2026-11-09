@@ -37,6 +37,26 @@ fn event_store_cursor_overflow() {
     assert!(events.is_empty());
 }
 
+#[test]
+fn merge3_non_conflicting() {
+    use collab_server::document::merge3;
+    let base = "line1\nline2\nline3\n";
+    let ours = "line1\nLINE2\nline3\n";   // changed line2
+    let theirs = "line1\nline2\nLINE3\n"; // changed line3
+    let merged = merge3(base, ours, theirs).expect("should merge cleanly");
+    assert!(merged.contains("LINE2"));
+    assert!(merged.contains("LINE3"));
+}
+
+#[test]
+fn merge3_conflict() {
+    use collab_server::document::{merge3, MergeError};
+    let base = "line1\nline2\n";
+    let ours = "line1\nOURS\n";
+    let theirs = "line1\nTHEIRS\n";
+    assert!(matches!(merge3(base, ours, theirs), Err(MergeError::Conflict)));
+}
+
 // Review Focus: member heartbeat expiry
 #[test]
 fn member_expired() {
