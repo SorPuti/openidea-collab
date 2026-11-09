@@ -186,11 +186,18 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
 
 <!-- ── CONNECTED ── -->
 <div id="app" hidden>
-  <div style="display:flex;align-items:center;margin-bottom:6px">
+  <div style="display:flex;align-items:center;margin-bottom:4px">
     <span id="sync-dot"></span>
-    <strong id="room-id" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace">—</strong>
+    <span style="flex:1;font-size:11px;color:var(--muted)">sala ativa</span>
+    <span id="peer-count" style="font-size:11px;color:var(--muted)"></span>
+  </div>
+
+  <div class="copy-row" style="margin-bottom:4px">
+    <span class="copy-val" id="room-id">—</span>
     <button class="copy-btn" title="Copiar Room ID" onclick="cp('room-id',this)">⎘</button>
-    <span id="peer-count"></span>
+  </div>
+  <div style="color:var(--muted);font-size:11px;margin-bottom:8px">
+    Compartilhe esse ID — o colaborador entra pelo painel dele
   </div>
 
   <div class="server-row">
@@ -211,14 +218,18 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
   const IS_DEV = __IS_DEV__;
   const initServerUrl = '__SERVER_URL__';
 
-  let _api = null;
-  try { _api = typeof openidea !== 'undefined' ? openidea : null; } catch(e) {}
-
   const $nc  = document.getElementById('not-connected');
   const $app = document.getElementById('app');
 
+  // Lazy: openidea may be injected after page load
   function sendMsg(obj) {
-    if (_api) _api.postMessage(JSON.stringify(obj));
+    try {
+      if (typeof openidea !== 'undefined') {
+        openidea.postMessage(JSON.stringify(obj));
+      } else {
+        showErr('openidea API não disponível — tente reabrir o painel');
+      }
+    } catch(e) { showErr('Erro ao enviar: ' + e.message); }
   }
 
   function showErr(msg) {
@@ -242,50 +253,43 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
 
   function cp(id, btn) {
     const val = document.getElementById(id).textContent;
-    navigator.clipboard.writeText(val).then(() => {
+    function ok() {
       btn.classList.add('ok'); btn.textContent = '✓';
-      setTimeout(() => { btn.classList.remove('ok'); btn.textContent = '⎘'; }, 1500);
-    }).catch(() => {});
-  }
-
-  // Live avatar update
-  let _avatarTimer = null;
-  function updateAvatar() {
-    const gh = document.getElementById('inp-github').value.trim();
-    const av = document.getElementById('profile-avatar');
-    if (gh) {
-      let img = av.querySelector('img');
-      if (!img) { img = document.createElement('img'); av.innerHTML = ''; av.appendChild(img); }
-      img.src = 'https://github.com/' + encodeURIComponent(gh) + '.png?size=48';
-      img.onerror = function() {
-        av.innerHTML = '';
-        const sp = document.createElement('span');
-        sp.id = 'avatar-initials';
-        sp.textContent = getInitials();
-        av.appendChild(sp);
-      };
-    } else {
-      av.innerHTML = '<span id="avatar-initials">' + getInitials() + '</span>';
+      setTimeout(function(){ btn.classList.remove('ok'); btn.textContent = '⎘'; }, 1500);
     }
+    function fallback() {
+      var tmp = document.createElement('input');
+      tmp.value = val; document.body.appendChild(tmp); tmp.select();
+      try { document.execCommand('copy'); ok(); } catch(e) {}
+      document.body.removeChild(tmp);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(val).then(ok, fallback);
+    } else { fallback(); }
   }
 
+  // Avatar: colored initials only (sandbox blocks external images)
+  function hashColor(str) {
+    if (!str) return '#607d8b';
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffff;
+    return 'hsl(' + (h % 360) + ',38%,42%)';
+  }
   function getInitials() {
     const name = document.getElementById('inp-name').value.trim();
     if (!name) return '?';
-    return name.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0,2);
+    return name.split(/\s+/).map(function(w){ return w[0]; }).join('').toUpperCase().slice(0,2);
   }
-
-  document.getElementById('inp-github').addEventListener('input', function() {
-    clearTimeout(_avatarTimer);
-    _avatarTimer = setTimeout(updateAvatar, 400);
-  });
-  document.getElementById('inp-name').addEventListener('input', function() {
+  function updateAvatar() {
+    const gh = document.getElementById('inp-github').value.trim();
     const av = document.getElementById('profile-avatar');
-    if (!document.getElementById('profile-avatar').querySelector('img')) {
-      const sp = av.querySelector('#avatar-initials') || av.querySelector('span');
-      if (sp) sp.textContent = getInitials();
-    }
-  });
+    const ini = getInitials();
+    const seed = gh || document.getElementById('inp-name').value.trim();
+    av.style.background = hashColor(seed);
+    av.innerHTML = '<span>' + ini + '</span>';
+  }
+  document.getElementById('inp-github').addEventListener('input', updateAvatar);
+  document.getElementById('inp-name').addEventListener('input', updateAvatar);
 
   function doSetServer() {
     const url = document.getElementById('inp-server').value.trim().replace(/\/+$/, '');
@@ -341,15 +345,8 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
       row.className = 'peer';
       const av = document.createElement('div');
       av.className = 'avatar';
-      if (p.github) {
-        const img = document.createElement('img');
-        img.src = 'https://github.com/' + p.github + '.png?size=40';
-        img.onerror = function() { img.remove(); av.textContent = p.initials||'?'; av.style.background = p.color||'#607d8b'; };
-        av.appendChild(img);
-      } else {
-        av.textContent = p.initials || '?';
-        av.style.background = p.color || '#607d8b';
-      }
+      av.textContent = p.initials || (p.name ? p.name[0].toUpperCase() : '?');
+      av.style.background = hashColor(p.github || p.name || '');
       const info = document.createElement('div');
       info.className = 'peer-info';
       const nm = document.createElement('div');
@@ -372,17 +369,27 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
   setBadge(document.getElementById('nc-badge'), IS_DEV);
   updateAvatar();
 
-  if (_api) {
-    _api.onMessage(function(raw) {
-      try {
-        const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (msg.type === 'state')       render(msg.state);
-        else if (msg.type === 'error')  { showErr(msg.message); setLoading(false); }
-        else if (msg.type === 'server-saved') {
-          document.getElementById('inp-server').value = msg.url;
-        }
-      } catch(e) {}
-    });
+  function setupMsgListener() {
+    try {
+      if (typeof openidea !== 'undefined') {
+        openidea.onMessage(function(raw) {
+          try {
+            const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            if (msg.type === 'state')         { render(msg.state); setLoading(false); }
+            else if (msg.type === 'error')    { showErr(msg.message); setLoading(false); }
+            else if (msg.type === 'server-saved') {
+              document.getElementById('inp-server').value = msg.url;
+            }
+          } catch(e) {}
+        });
+        return true;
+      }
+    } catch(e) {}
+    return false;
+  }
+  // Try now; retry once after a short delay in case the API is injected late
+  if (!setupMsgListener()) {
+    setTimeout(function(){ if (!setupMsgListener()) setTimeout(setupMsgListener, 500); }, 100);
   }
 </script>
 </body>
