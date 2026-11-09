@@ -113,4 +113,4 @@ The workflow builds the plugin, packs it as `.oiplugin`, and creates a GitHub Re
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
