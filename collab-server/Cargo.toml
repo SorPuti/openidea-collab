@@ -13,7 +13,7 @@ rand = { version = "0.8", features = ["small_rng"] }
 anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-diamond-types = "1.0"
+diffy = "0.5"
 
 [dev-dependencies]
 tokio-test = "0.4"
