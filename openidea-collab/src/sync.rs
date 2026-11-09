@@ -288,7 +288,17 @@ impl SyncState {
 
     /// Push current state as JSON to the HTML panel via post_view_message.
     pub fn push_panel_state(&self, room_id: &str) {
-        let payload = self.presence.build_panel_json(room_id, self.sync_active);
+        let server_url = self
+            .room
+            .as_ref()
+            .map(|r| r.server_url.as_str())
+            .unwrap_or(crate::DEFAULT_SERVER_URL);
+        let payload = self.presence.build_panel_json(
+            room_id,
+            self.sync_active,
+            server_url,
+            crate::IS_DEV,
+        );
         if let Ok(msg) = serde_json::to_string(&payload) {
             let _ = host::post_view_message(VIEW_COLLAB_PANEL, &msg);
         }

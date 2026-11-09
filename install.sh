@@ -266,7 +266,8 @@ _do_server() {
 _do_plugin() {
     mkdir -p "$PLUGIN_DIR"
     cp -r "$SRC_DIR/openidea-collab/." "$PLUGIN_DIR/"
-    openidea-plugin build "$PLUGIN_DIR"
+    # COLLAB_DEV=1 is picked up by build.rs → cfg(collab_dev) → panel shows DEV badge
+    COLLAB_DEV=1 openidea-plugin build "$PLUGIN_DIR"
 }
 
 _do_link() {

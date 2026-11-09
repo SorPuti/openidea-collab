@@ -105,13 +105,21 @@ impl PresenceState {
     }
 
     /// Build JSON state payload for the HTML panel.
-    pub fn build_panel_json(&self, room_id: &str, sync_active: bool) -> serde_json::Value {
+    pub fn build_panel_json(
+        &self,
+        room_id: &str,
+        sync_active: bool,
+        server_url: &str,
+        is_dev: bool,
+    ) -> serde_json::Value {
         let peers: Vec<serde_json::Value> = self.peers.values().map(|p| p.to_json()).collect();
         serde_json::json!({
             "type": "state",
             "state": {
                 "room_id": room_id,
                 "sync_active": sync_active,
+                "server_url": server_url,
+                "is_dev": is_dev,
                 "peer_count": peers.len(),
                 "peers": peers,
             }

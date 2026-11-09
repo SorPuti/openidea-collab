@@ -18,7 +18,9 @@ const DEFAULT_SERVER_URL: &str = "http://localhost:4444";
 const STORAGE_KEY_SERVER: &str = "server_url";
 const VIEW_COLLAB_PANEL: &str = "collab-panel";
 
-// HTML panel served in the right sidebar.
+const IS_DEV: bool = cfg!(collab_dev);
+
+// Placeholders replaced at render time: __SERVER_URL__  __IS_DEV__
 const PANEL_HTML: &str = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,74 +29,186 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
 <title>Collaborators</title>
 <style>
   :root {
-    --bg: var(--vscode-sideBar-background, #1e1e1e);
-    --fg: var(--vscode-sideBar-foreground, #cccccc);
-    --accent: var(--vscode-focusBorder, #007fd4);
-    --card: var(--vscode-editorWidget-background, #252526);
-    --border: var(--vscode-editorWidget-border, #454545);
-    --muted: var(--vscode-descriptionForeground, #888);
+    --bg:     var(--vscode-sideBar-background,      #1e1e1e);
+    --fg:     var(--vscode-sideBar-foreground,      #cccccc);
+    --accent: var(--vscode-focusBorder,             #007fd4);
+    --card:   var(--vscode-editorWidget-background, #252526);
+    --border: var(--vscode-editorWidget-border,     #3c3c3c);
+    --muted:  var(--vscode-descriptionForeground,   #888);
+    --green:  #4caf50;
     font-family: var(--vscode-font-family, system-ui, sans-serif);
     font-size: var(--vscode-font-size, 13px);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--fg); padding: 8px; }
-  #header { display: flex; align-items: center; gap: 8px; padding: 6px 0 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
-  #room-id { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-  #sync-dot.active { background: #4caf50; animation: pulse 1.5s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
-  #empty { color: var(--muted); text-align: center; padding: 24px 0; font-style: italic; }
-  .peer { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 4px; transition: background .15s; }
+  body { background: var(--bg); color: var(--fg); padding: 10px; }
+
+  /* ── copy row ── */
+  .copy-row {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 4px; padding: 5px 8px;
+  }
+  .copy-val {
+    flex: 1; font-family: monospace; font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .copy-btn {
+    flex-shrink: 0; cursor: pointer; background: none; border: none;
+    color: var(--muted); font-size: 15px; padding: 0 2px; line-height: 1;
+    transition: color .15s;
+  }
+  .copy-btn:hover { color: var(--fg); }
+  .copy-btn.ok    { color: var(--green) !important; }
+
+  /* ── label ── */
+  .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px;
+         color: var(--muted); margin: 10px 0 4px; }
+
+  /* ── badge ── */
+  .badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 5px; border-radius: 3px; vertical-align: middle;
+    margin-left: 6px;
+  }
+  .badge-dev  { background: #c4860020; color: #c48600; border: 1px solid #c4860040; }
+  .badge-pub  { background: #007fd420; color: #007fd4; border: 1px solid #007fd440; }
+
+  /* ── not connected ── */
+  #setup-title {
+    display: flex; align-items: center; gap: 0;
+    font-weight: 600; margin-bottom: 2px;
+  }
+  #hint {
+    color: var(--muted); font-size: 11px; margin-top: 12px; line-height: 1.5;
+  }
+  #hint kbd {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 4px; font-size: 11px;
+  }
+
+  /* ── connected ── */
+  #sync-dot { width: 8px; height: 8px; border-radius: 50%;
+              background: var(--muted); display: inline-block; margin-right: 6px; }
+  #sync-dot.active { background: var(--green); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  #peer-count { color: var(--muted); font-size: 11px; margin-left: auto; }
+
+  .peer { display: flex; align-items: center; gap: 10px;
+          padding: 6px 4px; border-radius: 4px; transition: background .15s; }
   .peer:hover { background: var(--card); }
-  .avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; overflow: hidden; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700; overflow: hidden; }
   .avatar img { width: 100%; height: 100%; object-fit: cover; }
   .peer-info { flex: 1; min-width: 0; }
-  .peer-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .peer-name   { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .peer-detail { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #not-connected { color: var(--muted); text-align: center; padding: 32px 0; }
-  #not-connected b { display: block; margin-bottom: 4px; }
+  #empty { color: var(--muted); text-align: center; padding: 20px 0; font-style: italic; font-size: 12px; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
 </style>
 </head>
 <body>
+
+<!-- ── NOT CONNECTED ── -->
 <div id="not-connected">
-  <b>Not connected</b>
-  Use <em>Collab: Join Room</em> to start
-</div>
-<div id="app" hidden>
-  <div id="header">
-    <span id="sync-dot"></span>
-    <span id="room-id">—</span>
-    <span id="peer-count" style="color:var(--muted);font-size:11px"></span>
+  <div id="setup-title">
+    ⟡ OpenIDEA Collab
+    <span id="nc-badge" class="badge"></span>
   </div>
-  <div id="peers"></div>
-  <div id="empty" hidden>No other collaborators yet</div>
+
+  <div class="lbl">Servidor</div>
+  <div class="copy-row">
+    <span class="copy-val" id="nc-server"></span>
+    <button class="copy-btn" title="Copiar URL" onclick="cp('nc-server',this)">⎘</button>
+  </div>
+
+  <div id="hint">
+    <kbd>Ctrl+Shift+P</kbd> → <strong>Collab: Create Room</strong><br>
+    para criar uma sala e compartilhar o ID com colegas.
+  </div>
 </div>
+
+<!-- ── CONNECTED ── -->
+<div id="app" hidden>
+  <div style="display:flex;align-items:center;margin-bottom:8px">
+    <span id="sync-dot"></span>
+    <strong id="room-id" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</strong>
+    <button class="copy-btn" title="Copiar Room ID" onclick="cp('room-id',this)">⎘</button>
+    <span id="peer-count"></span>
+  </div>
+
+  <div class="copy-row" style="margin-bottom:8px">
+    <span class="copy-val" id="conn-server"></span>
+    <button class="copy-btn" title="Copiar URL" onclick="cp('conn-server',this)">⎘</button>
+  </div>
+  <span id="conn-badge" class="badge" style="display:none"></span>
+
+  <hr>
+  <div id="peers"></div>
+  <div id="empty" hidden>Nenhum colaborador ainda</div>
+</div>
+
 <script>
-  const app = document.getElementById('app');
-  const nc  = document.getElementById('not-connected');
-  const dot = document.getElementById('sync-dot');
-  const rid = document.getElementById('room-id');
-  const pc  = document.getElementById('peer-count');
-  const pl  = document.getElementById('peers');
-  const em  = document.getElementById('empty');
+  const IS_DEV = __IS_DEV__;
+  const initServerUrl = '__SERVER_URL__';
+
+  const $nc   = document.getElementById('not-connected');
+  const $app  = document.getElementById('app');
+  const $ncBadge   = document.getElementById('nc-badge');
+  const $connBadge = document.getElementById('conn-badge');
+  const $ncServer  = document.getElementById('nc-server');
+  const $connServer= document.getElementById('conn-server');
+  const $dot  = document.getElementById('sync-dot');
+  const $rid  = document.getElementById('room-id');
+  const $pc   = document.getElementById('peer-count');
+  const $pl   = document.getElementById('peers');
+  const $em   = document.getElementById('empty');
+
+  function setBadge(el, dev) {
+    el.textContent = dev ? 'DEV' : 'Published';
+    el.className   = 'badge ' + (dev ? 'badge-dev' : 'badge-pub');
+    el.style.display = '';
+  }
+
+  // Boot: show not-connected with server URL and dev flag
+  $ncServer.textContent = initServerUrl;
+  setBadge($ncBadge, IS_DEV);
+
+  function cp(id, btn) {
+    const val = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(val).then(() => {
+      btn.classList.add('ok');
+      btn.textContent = '✓';
+      setTimeout(() => { btn.classList.remove('ok'); btn.textContent = '⎘'; }, 1500);
+    }).catch(() => {});
+  }
 
   function render(state) {
-    nc.hidden = true;
-    app.hidden = false;
-    rid.textContent = state.room_id || '—';
-    dot.className = state.sync_active ? 'active' : '';
+    if (!state.room_id) {
+      $nc.hidden  = false;
+      $app.hidden = true;
+      $ncServer.textContent = state.server_url || initServerUrl;
+      return;
+    }
+    $nc.hidden  = true;
+    $app.hidden = false;
+    $rid.textContent = state.room_id;
+    $dot.className   = state.sync_active ? 'active' : '';
+    $connServer.textContent = state.server_url || initServerUrl;
+    setBadge($connBadge, state.is_dev);
+
     const peers = state.peers || [];
-    pc.textContent = peers.length ? `${peers.length} peer${peers.length>1?'s':''}` : '';
-    pl.innerHTML = '';
+    $pc.textContent = peers.length ? `${peers.length} peer${peers.length>1?'s':''}` : '';
+    $pl.innerHTML = '';
     peers.forEach(p => {
-      const div = document.createElement('div');
-      div.className = 'peer';
+      const row  = document.createElement('div');
+      row.className = 'peer';
       const av = document.createElement('div');
       av.className = 'avatar';
       if (p.github) {
         const img = document.createElement('img');
         img.src = `https://github.com/${p.github}.png?size=40`;
-        img.onerror = () => { img.remove(); av.textContent = p.initials || '?'; av.style.background = p.color || '#607d8b'; };
+        img.onerror = () => { img.remove(); av.textContent = p.initials||'?'; av.style.background = p.color||'#607d8b'; };
         av.appendChild(img);
       } else {
         av.textContent = p.initials || '?';
@@ -102,27 +216,26 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
       }
       const info = document.createElement('div');
       info.className = 'peer-info';
-      const name = document.createElement('div');
-      name.className = 'peer-name';
-      name.textContent = p.github ? `${p.name} @${p.github}` : p.name;
-      info.appendChild(name);
+      const nm = document.createElement('div');
+      nm.className = 'peer-name';
+      nm.textContent = p.github ? `${p.name} @${p.github}` : p.name;
+      info.appendChild(nm);
       if (p.file) {
-        const detail = document.createElement('div');
-        detail.className = 'peer-detail';
-        detail.textContent = p.line != null ? `${p.file} :${p.line+1}` : p.file;
-        info.appendChild(detail);
+        const dt = document.createElement('div');
+        dt.className = 'peer-detail';
+        dt.textContent = p.line != null ? `${p.file} :${p.line+1}` : p.file;
+        info.appendChild(dt);
       }
-      div.appendChild(av);
-      div.appendChild(info);
-      pl.appendChild(div);
+      row.appendChild(av); row.appendChild(info);
+      $pl.appendChild(row);
     });
-    em.hidden = peers.length > 0;
+    $em.hidden = peers.length > 0;
   }
 
   window.addEventListener('message', e => {
     try {
       const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-      if (msg && msg.type === 'state') render(msg.state);
+      if (msg?.type === 'state') render(msg.state);
     } catch {}
   });
 </script>
@@ -335,7 +448,14 @@ impl Views for CollabPlugin {
         if view != VIEW_COLLAB_PANEL {
             return Err(Error::NotFound(format!("unknown view {view}")));
         }
-        Ok(View::new(Body::Html(PANEL_HTML.to_owned())))
+        let server_url = host::storage::get(STORAGE_KEY_SERVER)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| DEFAULT_SERVER_URL.to_owned());
+        let html = PANEL_HTML
+            .replace("__SERVER_URL__", &server_url)
+            .replace("__IS_DEV__", if IS_DEV { "true" } else { "false" });
+        Ok(View::new(Body::Html(html)))
     }
 }
 
