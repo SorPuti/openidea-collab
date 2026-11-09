@@ -33,6 +33,11 @@ impl PresenceState {
         self.peers.remove(uid);
     }
 
+    /// Return the display name for an existing peer, if known.
+    pub fn peer_name(&self, uid: &str) -> Option<&str> {
+        self.peers.get(uid).map(|p| p.name.as_str())
+    }
+
     /// Build the tree items for the Collaborators side-panel.
     /// Each peer becomes one item: label = name, detail = current file.
     pub fn to_tree_items(&self) -> Vec<TreeItem> {

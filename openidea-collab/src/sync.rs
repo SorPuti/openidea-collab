@@ -118,7 +118,7 @@ impl SyncState {
                         self.presence.update_peer(
                             uid.to_owned(),
                             name.to_owned(),
-                            inner["current_file"]
+                            inner["file"]
                                 .as_str()
                                 .map(str::to_owned),
                         );
@@ -132,14 +132,14 @@ impl SyncState {
                     }
                 }
                 "presence_changed" => {
-                    if let (Some(uid), Some(name)) = (
-                        inner["user_id"].as_str(),
-                        inner["name"].as_str(),
-                    ) {
+                    if let Some(uid) = inner["user_id"].as_str() {
+                        let name = self.presence.peer_name(uid)
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| uid.to_owned());
                         self.presence.update_peer(
                             uid.to_owned(),
-                            name.to_owned(),
-                            inner["current_file"]
+                            name,
+                            inner["file"]
                                 .as_str()
                                 .map(str::to_owned),
                         );
@@ -147,16 +147,19 @@ impl SyncState {
                     }
                 }
                 "conflict_warn" => {
-                    let file = inner["path"]
+                    let path = inner["path"]
                         .as_str()
                         .unwrap_or("(unknown)");
-                    let user = inner["user_id"]
+                    let user_a = inner["user_a"]
                         .as_str()
-                        .unwrap_or("another user");
+                        .unwrap_or("(unknown)");
+                    let user_b = inner["user_b"]
+                        .as_str()
+                        .unwrap_or("(unknown)");
                     host::notify(
                         NotificationLevel::Warning,
                         "Collab Conflict",
-                        &format!("Conflict in {file} with {user}"),
+                        &format!("Conflict on {path}: {user_a} vs {user_b}"),
                     );
                 }
                 _ => {}
@@ -185,15 +188,11 @@ impl SyncState {
             return;
         }
         // Fetch the latest text from the server and write it to the project.
-        match client.get_file(&room.room_id, path) {
-            Ok((version, text)) => {
-                if let Some(project) = ctx.project() {
-                    if project.write_file(path, &text).is_ok() {
-                        self.file_versions.insert(path.to_owned(), version);
-                    }
-                }
-            }
-            Err(_) => {}
+        if let Ok((version, text)) = client.get_file(&room.room_id, path)
+            && let Some(project) = ctx.project()
+            && project.write_file(path, &text).is_ok()
+        {
+            self.file_versions.insert(path.to_owned(), version);
         }
     }
 }
