@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RoomEvent {
@@ -54,11 +52,7 @@ impl EventStore {
     }
 
     /// Return all events with id >= cursor.
-    /// When timeout_ms > 0, sleeps that many milliseconds (capped at 5000) before returning.
-    pub fn since(&self, cursor: u64, timeout_ms: u64) -> Vec<EventEnvelope> {
-        if timeout_ms > 0 {
-            std::thread::sleep(Duration::from_millis(timeout_ms.min(5000)));
-        }
+    pub fn since(&self, cursor: u64) -> Vec<EventEnvelope> {
         self.events
             .iter()
             .filter(|e| e.id >= cursor)

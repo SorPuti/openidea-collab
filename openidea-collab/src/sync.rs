@@ -1,10 +1,10 @@
 //! Sync loop: file version tracking, event polling and presence management.
 
-use std::collections::HashMap;
-use openidea_plugin::{host, Invocation, NotificationLevel};
 use crate::client::CollabClient;
 use crate::presence::PresenceState;
 use crate::room::RoomState;
+use openidea_plugin::{Invocation, NotificationLevel, host};
+use std::collections::HashMap;
 
 const STORAGE_KEY: &str = "room_state";
 const VIEW_COLLAB_PANEL: &str = "collab-panel";
@@ -33,10 +33,7 @@ impl SyncState {
         match host::storage::get(STORAGE_KEY) {
             Ok(Some(json)) => match serde_json::from_str::<RoomState>(&json) {
                 Ok(room) => Self {
-                    presence: PresenceState::new(
-                        room.user_id.clone(),
-                        room.name.clone(),
-                    ),
+                    presence: PresenceState::new(room.user_id.clone(), room.name.clone()),
                     room: Some(room),
                     file_versions: HashMap::new(),
                     poll_cursor: 0,
@@ -59,12 +56,7 @@ impl SyncState {
     }
 
     /// Called when the user saves a file: read its text and POST to the server.
-    pub fn on_file_saved(
-        &mut self,
-        client: &CollabClient,
-        ctx: &Invocation,
-        path: &str,
-    ) {
+    pub fn on_file_saved(&mut self, client: &CollabClient, ctx: &Invocation, path: &str) {
         let room = match self.room.as_ref() {
             Some(r) => r.clone(),
             None => return,
@@ -79,15 +71,24 @@ impl SyncState {
         };
         let version = self.file_versions.get(path).copied().unwrap_or(0);
         match client.post_file(&room.room_id, &room.user_id, path, version, &text) {
-            Ok(event_id) => {
-                self.file_versions.insert(path.to_owned(), event_id);
+            Ok(new_version) => {
+                self.file_versions.insert(path.to_owned(), new_version);
             }
             Err(e) => {
-                host::notify(
-                    NotificationLevel::Warning,
-                    "Collab Sync",
-                    &format!("Failed to sync {path}: {e}"),
-                );
+                let msg = e.to_string();
+                if msg.contains("conflict") {
+                    host::notify(
+                        NotificationLevel::Warning,
+                        "Collab Conflict",
+                        "Conflict detected — another user modified this file. Save again to overwrite.",
+                    );
+                } else {
+                    host::notify(
+                        NotificationLevel::Warning,
+                        "Collab Sync",
+                        &format!("Failed to sync {path}: {e}"),
+                    );
+                }
             }
         }
     }
@@ -111,16 +112,13 @@ impl SyncState {
                     self.apply_file_updated(client, ctx, inner, &room);
                 }
                 "member_joined" => {
-                    if let (Some(uid), Some(name)) = (
-                        inner["user_id"].as_str(),
-                        inner["name"].as_str(),
-                    ) {
+                    if let (Some(uid), Some(name)) =
+                        (inner["user_id"].as_str(), inner["name"].as_str())
+                    {
                         self.presence.update_peer(
                             uid.to_owned(),
                             name.to_owned(),
-                            inner["file"]
-                                .as_str()
-                                .map(str::to_owned),
+                            inner["file"].as_str().map(str::to_owned),
                         );
                         presence_changed = true;
                     }
@@ -133,29 +131,23 @@ impl SyncState {
                 }
                 "presence_changed" => {
                     if let Some(uid) = inner["user_id"].as_str() {
-                        let name = self.presence.peer_name(uid)
+                        let name = self
+                            .presence
+                            .peer_name(uid)
                             .map(str::to_owned)
                             .unwrap_or_else(|| uid.to_owned());
                         self.presence.update_peer(
                             uid.to_owned(),
                             name,
-                            inner["file"]
-                                .as_str()
-                                .map(str::to_owned),
+                            inner["file"].as_str().map(str::to_owned),
                         );
                         presence_changed = true;
                     }
                 }
                 "conflict_warn" => {
-                    let path = inner["path"]
-                        .as_str()
-                        .unwrap_or("(unknown)");
-                    let user_a = inner["user_a"]
-                        .as_str()
-                        .unwrap_or("(unknown)");
-                    let user_b = inner["user_b"]
-                        .as_str()
-                        .unwrap_or("(unknown)");
+                    let path = inner["path"].as_str().unwrap_or("(unknown)");
+                    let user_a = inner["user_a"].as_str().unwrap_or("(unknown)");
+                    let user_b = inner["user_b"].as_str().unwrap_or("(unknown)");
                     host::notify(
                         NotificationLevel::Warning,
                         "Collab Conflict",
