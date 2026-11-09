@@ -53,6 +53,10 @@ t() {
             done_logs)    echo "Logs" ;;
             done_ngrok)   echo "Cross-network" ;;
             err_title)    echo "Step failed — check the log" ;;
+            ide_running)  echo "OpenIDEA is open. Restart now to load the plugin?" ;;
+            ide_yn)       echo "[Y/n]" ;;
+            ide_restarted)echo "OpenIDEA restarted" ;;
+            ide_manual)   echo "Restart OpenIDEA manually to load the plugin" ;;
         esac
     else
         case "$k" in
@@ -83,6 +87,10 @@ t() {
             done_logs)    echo "Logs" ;;
             done_ngrok)   echo "Rede externa" ;;
             err_title)    echo "Etapa falhou — veja o log" ;;
+            ide_running)  echo "OpenIDEA está aberto. Reiniciar agora para carregar o plugin?" ;;
+            ide_yn)       echo "[S/n]" ;;
+            ide_restarted)echo "OpenIDEA reiniciado" ;;
+            ide_manual)   echo "Reinicie o OpenIDEA manualmente para carregar o plugin" ;;
         esac
     fi
 }
@@ -400,6 +408,54 @@ _do_verify() {
     return 1
 }
 
+# ── Restart IDE ──────────────────────────────────────────────────────────────
+_restart_ide() {
+    # Find the running OpenIDEA process
+    local pid bin workspace=""
+    pid=$(pgrep -f "openidea" 2>/dev/null | head -1) || pid=""
+    [ -z "$pid" ] && return 0  # not running — nothing to do
+
+    # Resolve the actual binary
+    bin=$(readlink -f /proc/"$pid"/exe 2>/dev/null) || bin="openidea"
+
+    # Try to recover the workspace path from cmdline args
+    local -a args=()
+    if [ -f /proc/"$pid"/cmdline ]; then
+        mapfile -d '' args < /proc/"$pid"/cmdline 2>/dev/null || true
+    fi
+    for arg in "${args[@]:1}"; do
+        [ -d "$arg" ] && workspace="$arg" && break
+    done
+
+    echo
+    printf "   ${W}$(t ide_running)${X}  ${D}$(t ide_yn)${X}  "
+    cursor_on
+    local ans
+    read -r ans
+    cursor_off
+
+    # Accept: empty / s / S / y / Y → restart; anything else → skip
+    case "${ans,,}" in
+        ''|s|y|sim|yes) ;;
+        *) echo -e "   ${D}$(t ide_manual)${X}"; return 0 ;;
+    esac
+
+    kill "$pid" 2>/dev/null || true
+    # Wait up to 5 s for it to close
+    local i=0
+    while kill -0 "$pid" 2>/dev/null && [ $i -lt 10 ]; do
+        sleep 0.5; i=$((i+1))
+    done
+
+    if [ -n "$workspace" ]; then
+        nohup "$bin" "$workspace" </dev/null &>/dev/null &
+    else
+        nohup "$bin" </dev/null &>/dev/null &
+    fi
+    disown 2>/dev/null || true
+    echo -e "   ${G}✓${X}  $(t ide_restarted)"
+}
+
 # ── Screen 5 : done ───────────────────────────────────────────────────────────
 screen_done() {
     echo; hr; echo
@@ -411,7 +467,7 @@ screen_done() {
     echo -e "   ${W}porta${X}          ${D}→${X}  :${SERVER_PORT}"
     echo
     if $IS_UPDATE; then
-        echo -e "   ${G}→${X}  $(t done_restart)"
+        _restart_ide
     else
         echo -e "   ${Y}1.${X}  $(t done_restart)"
         echo -e "   ${Y}2.${X}  ${D}$(t done_logs):${X} journalctl --user -u collab-server -f"
