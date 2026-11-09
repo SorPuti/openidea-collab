@@ -91,12 +91,12 @@ Run **Collab: Set Server URL** and enter your server's public URL.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/rooms` | Create room → `{"room_id": "…"}` |
-| `POST` | `/rooms/:id/join` | Join room, get `member_id` |
-| `GET` | `/rooms/:id/members` | List present members |
-| `POST` | `/rooms/:id/members/:uid/presence` | Update current file |
-| `GET` | `/rooms/:id/files/:path` | Get latest file text + version |
-| `POST` | `/rooms/:id/files/:path` | Push file update (conflict → 409) |
-| `GET` | `/rooms/:id/events?cursor=N` | Long-poll for new events (holds 5 s) |
+| `POST` | `/rooms/{id}/join` | Join room, get `member_id` |
+| `GET` | `/rooms/{id}/members` | List present members |
+| `POST` | `/rooms/{id}/members/{uid}/presence` | Update current file + cursor position |
+| `GET` | `/rooms/{id}/files/{*path}` | Get latest file text + version |
+| `POST` | `/rooms/{id}/files/{*path}` | Push file update (conflict → 409) |
+| `GET` | `/rooms/{id}/events?cursor=N` | Long-poll for new events (holds 5 s) |
 
 All endpoints return JSON. The `events` endpoint holds the connection open until an event arrives or the timeout expires.
 
@@ -111,25 +111,35 @@ curl -fsSL https://raw.githubusercontent.com/SorPuti/openidea-collab/master/inst
 The script:
 - Detects your OS (Fedora, Ubuntu/Debian, Arch, macOS)
 - Installs Rust via `rustup` if needed
+- Installs the `openidea-plugin` CLI
 - Builds and installs `collab-server` to `~/.local/bin/`
+- Builds the plugin from source (`wasm32-wasip2`) and registers it via `openidea-plugin link` (bypasses publisher verification — no marketplace approval required)
 - Registers a **systemd user service** (Linux) or **launchd agent** (macOS) so the server starts automatically on login
-- Downloads the latest `.oiplugin` to `~/Downloads/`
-- Prints next steps
+- Restart OpenIDEA after the script finishes — the plugin loads automatically
 
-> Override defaults with env vars: `COLLAB_PORT=5000 INSTALL_DIR=/usr/local/bin curl … | bash`
+If already installed, running the script again **updates** the server and plugin, then restarts the service automatically.
+
+> Override defaults with env vars: `COLLAB_PORT=5000 COLLAB_INSTALL_DIR=/usr/local/bin curl … | bash`
 
 ### From marketplace (once PR is merged)
 
 In **OpenIDEA → Settings → Plugins → Available**, search for `openidea-collab`.
 
-### Manual plugin install (no marketplace required)
+### Manual plugin install (dev link, no marketplace required)
 
-1. Go to the [latest release](https://github.com/SorPuti/openidea-collab/releases/latest).
-2. Download `sorputi.openidea-collab-X.Y.Z.oiplugin`.
-3. Drag the `.oiplugin` file onto the OpenIDEA window, or use  
-   **Settings → Plugins → Install from file…** and select it.
+```bash
+# Install the plugin CLI
+cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
 
-The plugin is active immediately — no IDE restart required.
+# Clone and build
+git clone https://github.com/SorPuti/openidea-collab.git
+cd openidea-collab
+rustup target add wasm32-wasip2
+openidea-plugin build openidea-collab
+openidea-plugin link openidea-collab
+```
+
+Restart OpenIDEA — the plugin loads automatically.
 
 ## Development
 
