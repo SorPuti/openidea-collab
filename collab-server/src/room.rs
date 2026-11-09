@@ -7,6 +7,9 @@ pub struct Member {
     pub user_id: String,
     pub name: String,
     pub current_file: Option<String>,
+    pub github: Option<String>,
+    pub line: Option<u32>,
+    pub col: Option<u32>,
     pub last_seen: Instant,
 }
 
@@ -49,9 +52,21 @@ impl Room {
         self.members.remove(user_id);
     }
 
-    pub fn update_presence(&mut self, user_id: &str, file: Option<String>) {
+    pub fn update_presence(
+        &mut self,
+        user_id: &str,
+        file: Option<String>,
+        github: Option<String>,
+        line: Option<u32>,
+        col: Option<u32>,
+    ) {
         if let Some(member) = self.members.get_mut(user_id) {
             member.current_file = file;
+            if github.is_some() {
+                member.github = github;
+            }
+            member.line = line;
+            member.col = col;
             member.last_seen = Instant::now();
         }
     }

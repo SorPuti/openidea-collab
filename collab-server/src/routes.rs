@@ -32,6 +32,12 @@ struct MemberInfo {
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     current_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    github: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    col: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -84,6 +90,9 @@ struct EventsResponse {
 #[derive(Deserialize)]
 struct PresenceRequest {
     current_file: Option<String>,
+    github: Option<String>,
+    line: Option<u32>,
+    col: Option<u32>,
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -135,6 +144,9 @@ async fn get_room(
             user_id: m.user_id.clone(),
             name: m.name.clone(),
             current_file: m.current_file.clone(),
+            github: m.github.clone(),
+            line: m.line,
+            col: m.col,
         })
         .collect();
     Ok(Json(RoomInfoResponse {
@@ -157,6 +169,9 @@ async fn join_room(
         user_id: user_id.clone(),
         name: body.name.clone(),
         current_file: None,
+        github: None,
+        line: None,
+        col: None,
         last_seen: Instant::now(),
     });
     room.events.push(RoomEvent::MemberJoined {
@@ -194,8 +209,8 @@ async fn update_file(
                 None => return Err(Box::new(StatusCode::NOT_FOUND.into_response())),
             };
 
-            // Update presence for the requesting user.
-            room.update_presence(&body.user_id, Some(path.clone()));
+            // Update presence for the requesting user (file only; cursor unchanged).
+            room.update_presence(&body.user_id, Some(path.clone()), None, None, None);
 
             // Detect conflict: version mismatch from a different user.
             let conflict_info: Option<(String, String, u64)> =
@@ -293,6 +308,9 @@ async fn get_members(
             user_id: m.user_id.clone(),
             name: m.name.clone(),
             current_file: m.current_file.clone(),
+            github: m.github.clone(),
+            line: m.line,
+            col: m.col,
         })
         .collect();
     Ok(Json(members))
@@ -358,10 +376,13 @@ async fn post_presence(
     if !room.members.contains_key(&uid) {
         return Err(StatusCode::NOT_FOUND);
     }
-    room.update_presence(&uid, body.current_file.clone());
+    room.update_presence(&uid, body.current_file.clone(), body.github.clone(), body.line, body.col);
     room.events.push(RoomEvent::PresenceChanged {
         user_id: uid,
         file: body.current_file,
+        github: body.github,
+        line: body.line,
+        col: body.col,
     });
     Ok(StatusCode::NO_CONTENT)
 }

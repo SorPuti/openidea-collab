@@ -1,18 +1,18 @@
 id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
-version = "0.1.0"
+version = "0.2.0"
 description = "Real-time collaboration for OpenIDEA: sync files between developers."
 authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
-change-notes = "0.1.0 — first release: room creation, file sync, presence panel."
+change-notes = "0.2.0 — cursor decorations, GitHub avatars, file badges, status bar, remote server support."
 categories = ["tools"]
 engines.openidea = "^1.3"
 wasm = "dist/plugin.wasm"
-activation = ["on-event:file-saved", "on-event:editor-focused", "on-command:*"]
+activation = ["on-event:file-saved", "on-event:editor-focused", "on-command:*", "on-schedule:5"]
 
 [capabilities]
-required = ["project.read", "project.write", "events", "storage"]
-optional = ["net:localhost"]
+required = ["project.read", "project.write", "events", "storage", "editor.read"]
+optional = ["net:*"]
 
 [[contributes.commands]]
 id = "create-room"
@@ -27,6 +27,11 @@ category = "Collab"
 [[contributes.commands]]
 id = "leave-room"
 title = "Collab: Leave Room"
+category = "Collab"
+
+[[contributes.commands]]
+id = "set-server"
+title = "Collab: Set Server URL"
 category = "Collab"
 
 [[contributes.views]]

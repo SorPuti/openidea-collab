@@ -190,21 +190,28 @@ impl CollabClient {
         }
     }
 
-    /// POST /rooms/{id}/members/{user_id}/presence  body: { current_file }
+    /// POST /rooms/{id}/members/{user_id}/presence  body: { current_file, github?, line?, col? }
     pub fn update_presence(
         &self,
         room_id: &str,
         user_id: &str,
         current_file: Option<&str>,
+        github: Option<&str>,
+        line: Option<u32>,
+        col: Option<u32>,
     ) -> Result<(), anyhow::Error> {
         let url = format!(
             "{}/rooms/{room_id}/members/{user_id}/presence",
             self.server_url
         );
-        let payload = serde_json::to_vec(&serde_json::json!({ "current_file": current_file }))?;
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "current_file": current_file,
+            "github": github,
+            "line": line,
+            "col": col,
+        }))?;
         let mut req = HttpRequest::post(&url, payload).header("content-type", "application/json");
         req.timeout_ms = Some(3000);
-        // Best-effort: ignore errors (endpoint may not be implemented yet)
         let _ = host::fetch(&req);
         Ok(())
     }

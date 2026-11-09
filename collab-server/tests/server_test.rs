@@ -9,6 +9,9 @@ fn room_add_remove_member() {
         user_id: "u1".into(),
         name: "Ana".into(),
         current_file: None,
+        github: None,
+        line: None,
+        col: None,
         last_seen: Instant::now(),
     });
     assert_eq!(room.members.len(), 1);
@@ -71,6 +74,9 @@ fn member_expired() {
         user_id: "u1".into(),
         name: "Ana".into(),
         current_file: None,
+        github: None,
+        line: None,
+        col: None,
         last_seen: Instant::now() - Duration::from_secs(31),
     };
     assert!(member.is_expired(30));

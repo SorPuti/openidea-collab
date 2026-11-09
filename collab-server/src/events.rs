@@ -16,6 +16,12 @@ pub enum RoomEvent {
     PresenceChanged {
         user_id: String,
         file: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        github: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        line: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        col: Option<u32>,
     },
     ConflictWarn {
         path: String,
