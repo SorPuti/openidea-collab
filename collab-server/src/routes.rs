@@ -14,7 +14,6 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::document;
 use crate::events::{EventEnvelope, RoomEvent};
 use crate::room::{FileState, Member, Room};
 
@@ -84,7 +83,7 @@ struct EventsResponse {
 
 #[derive(Deserialize)]
 struct PresenceRequest {
-    file: Option<String>,
+    current_file: Option<String>,
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -198,37 +197,34 @@ async fn update_file(
             // Update presence for the requesting user.
             room.update_presence(&body.user_id, Some(path.clone()));
 
-            // Extract conflict info before dropping the immutable borrow on room.files.
-            let conflict_info: Option<(String, String)> = room.files.get(&path).and_then(|file| {
-                if file.version != body.version && file.last_user != body.user_id {
-                    Some((file.last_user.clone(), file.text.clone()))
-                } else {
-                    None
-                }
-            });
-
-            // Resolve conflict or use incoming text directly.
-            let final_text = if let Some((last_user, server_text)) = conflict_info {
-                match document::merge3("", &body.text, &server_text) {
-                    Ok(merged) => merged,
-                    Err(_) => {
-                        room.events.push(RoomEvent::ConflictWarn {
-                            path: path.clone(),
-                            user_a: last_user,
-                            user_b: body.user_id.clone(),
-                        });
-                        return Err(Box::new(
-                            (
-                                StatusCode::CONFLICT,
-                                Json(serde_json::json!({
-                                    "error": "conflict",
-                                    "server_text": server_text
-                                })),
-                            )
-                                .into_response(),
-                        ));
+            // Detect conflict: version mismatch from a different user.
+            let conflict_info: Option<(String, String, u64)> =
+                room.files.get(&path).and_then(|file| {
+                    if file.version != body.version && file.last_user != body.user_id {
+                        Some((file.last_user.clone(), file.text.clone(), file.version))
+                    } else {
+                        None
                     }
-                }
+                });
+
+            // On conflict emit a warning event and return 409 — no fake merge.
+            let final_text = if let Some((last_user, server_text, server_version)) = conflict_info {
+                room.events.push(RoomEvent::ConflictWarn {
+                    path: path.clone(),
+                    user_a: body.user_id.clone(),
+                    user_b: last_user,
+                });
+                return Err(Box::new(
+                    (
+                        StatusCode::CONFLICT,
+                        Json(serde_json::json!({
+                            "error": "conflict",
+                            "server_text": server_text,
+                            "server_version": server_version,
+                        })),
+                    )
+                        .into_response(),
+                ));
             } else {
                 body.text
             };
@@ -362,10 +358,10 @@ async fn post_presence(
     if !room.members.contains_key(&uid) {
         return Err(StatusCode::NOT_FOUND);
     }
-    room.update_presence(&uid, body.file.clone());
+    room.update_presence(&uid, body.current_file.clone());
     room.events.push(RoomEvent::PresenceChanged {
         user_id: uid,
-        file: body.file,
+        file: body.current_file,
     });
     Ok(StatusCode::NO_CONTENT)
 }
