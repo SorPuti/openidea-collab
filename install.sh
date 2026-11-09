@@ -313,13 +313,13 @@ _do_server() {
     rm -f "$INSTALL_DIR/collab-server"
     install -m 755 "$SRC_DIR/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
     # Ensure PATH
-    [[ ":$PATH:" != *":$INSTALL_DIR:"* ]] && {
+    if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
             [ -f "$rc" ] && ! grep -q "$INSTALL_DIR" "$rc" && \
-                echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$rc"
+                echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$rc" || true
         done
         export PATH="$INSTALL_DIR:$PATH"
-    }
+    fi
 }
 
 _do_plugin() {
