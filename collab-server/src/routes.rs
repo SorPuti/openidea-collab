@@ -100,13 +100,13 @@ struct PresenceRequest {
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/rooms", post(create_room))
-        .route("/rooms/:id", get(get_room))
-        .route("/rooms/:id/join", post(join_room))
-        .route("/rooms/:id/members/:uid", delete(leave_room))
-        .route("/rooms/:id/files/*path", post(update_file).get(get_file))
-        .route("/rooms/:id/members", get(get_members))
-        .route("/rooms/:id/events", get(get_events))
-        .route("/rooms/:id/members/:uid/presence", post(post_presence))
+        .route("/rooms/{id}", get(get_room))
+        .route("/rooms/{id}/join", post(join_room))
+        .route("/rooms/{id}/members/{uid}", delete(leave_room))
+        .route("/rooms/{id}/files/{*path}", post(update_file).get(get_file))
+        .route("/rooms/{id}/members", get(get_members))
+        .route("/rooms/{id}/events", get(get_events))
+        .route("/rooms/{id}/members/{uid}/presence", post(post_presence))
         .with_state(state)
 }
 
