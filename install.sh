@@ -129,6 +129,17 @@ install_server() {
     header "▸ collab-server"
     mkdir -p "$INSTALL_DIR"
 
+    # Stop the service before replacing the binary (avoids ETXTBSY on Linux)
+    if $IS_UPDATE; then
+        case "$OS_ID" in
+            macos)
+                PLIST="$HOME/Library/LaunchAgents/com.sorputi.collab-server.plist"
+                [ -f "$PLIST" ] && launchctl unload "$PLIST" 2>/dev/null || true ;;
+            *)
+                systemctl --user stop collab-server.service 2>/dev/null || true ;;
+        esac
+    fi
+
     # Try pre-built binary first
     LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
         2>/dev/null | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/' || true)
@@ -146,8 +157,8 @@ install_server() {
 
     info "Building collab-server from source..."
     cargo build --release --manifest-path "$SRC_DIR/collab-server/Cargo.toml"
-    cp "$SRC_DIR/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
-    chmod +x "$INSTALL_DIR/collab-server"
+    # Use install -m 755 instead of cp — atomically replaces the binary
+    install -m 755 "$SRC_DIR/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
     ok "collab-server built → $INSTALL_DIR/collab-server"
 }
 
