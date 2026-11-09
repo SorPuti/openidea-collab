@@ -24,373 +24,438 @@ const IS_DEV: bool = cfg!(collab_dev);
 
 // Placeholders replaced at render time: __SERVER_URL__ __IS_DEV__ __INIT_NAME__ __INIT_GITHUB__
 const PANEL_HTML: &str = r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Collaborators</title>
+<title>OpenIDEA Collab</title>
 <style>
-  :root {
-    --bg:     var(--vscode-sideBar-background,      #1e1e1e);
-    --fg:     var(--vscode-sideBar-foreground,      #cccccc);
-    --accent: var(--vscode-focusBorder,             #007fd4);
-    --card:   var(--vscode-editorWidget-background, #252526);
-    --border: var(--vscode-editorWidget-border,     #3c3c3c);
-    --input:  var(--vscode-input-background,        #3c3c3c);
-    --muted:  var(--vscode-descriptionForeground,   #888);
-    --green:  #4caf50;
-    --danger: #c0392b;
-    font-family: var(--vscode-font-family, system-ui, sans-serif);
-    font-size: var(--vscode-font-size, 13px);
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--fg); padding: 10px; }
+:root {
+  --bg:     var(--vscode-sideBar-background,      #1e1e1e);
+  --fg:     var(--vscode-sideBar-foreground,      #cccccc);
+  --accent: var(--vscode-focusBorder,             #007fd4);
+  --card:   var(--vscode-editorWidget-background, #252526);
+  --border: var(--vscode-editorWidget-border,     #3c3c3c);
+  --input:  var(--vscode-input-background,        #3c3c3c);
+  --muted:  var(--vscode-descriptionForeground,   #888);
+  --green:  #4caf50;
+  --danger: #e05252;
+  --radius: 6px;
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: 13px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);padding:12px 10px 20px}
 
-  .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px;
-         color: var(--muted); margin: 10px 0 4px; }
+/* ── header ── */
+.hdr{display:flex;align-items:center;gap:6px;margin-bottom:14px}
+.hdr-logo{font-size:14px;font-weight:700;white-space:nowrap}
+.hdr-spacer{flex:1}
+.badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;white-space:nowrap}
+.badge-dev{background:#c4860018;color:#c48600;border:1px solid #c4860038}
+.badge-pub{background:#007fd418;color:#007fd4;border:1px solid #007fd438}
+.gear-btn{cursor:pointer;background:none;border:none;color:var(--muted);
+          font-size:14px;padding:2px 4px;border-radius:4px;line-height:1;transition:color .15s}
+.gear-btn:hover{color:var(--fg)}
 
-  .badge {
-    display: inline-block; font-size: 10px; font-weight: 700;
-    padding: 1px 5px; border-radius: 3px; vertical-align: middle; margin-left: 6px;
-  }
-  .badge-dev  { background: #c4860020; color: #c48600; border: 1px solid #c4860040; }
-  .badge-pub  { background: #007fd420; color: #007fd4; border: 1px solid #007fd440; }
+/* ── server drawer ── */
+#server-drawer{background:var(--card);border:1px solid var(--border);
+               border-radius:var(--radius);padding:10px;margin-bottom:12px}
+.drawer-row{display:flex;gap:6px;align-items:center}
+.drawer-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;
+            color:var(--muted);margin-bottom:6px}
 
-  /* ── input row ── */
-  .input-row { display: flex; gap: 4px; }
-  input[type=text] {
-    flex: 1; background: var(--input); border: 1px solid var(--border);
-    color: var(--fg); border-radius: 4px; padding: 5px 8px; font-size: 12px;
-    outline: none; min-width: 0;
-  }
-  input[type=text]:focus { border-color: var(--accent); }
-  input[type=text]::placeholder { color: var(--muted); }
+/* ── inputs ── */
+input[type=text]{
+  flex:1;background:var(--input);border:1px solid var(--border);
+  color:var(--fg);border-radius:4px;padding:5px 8px;font-size:12px;
+  outline:none;min-width:0;width:100%
+}
+input[type=text]:focus{border-color:var(--accent)}
+input[type=text]::placeholder{color:var(--muted)}
 
-  /* ── copy row ── */
-  .copy-row {
-    display: flex; align-items: center; gap: 6px;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 4px; padding: 5px 8px;
-  }
-  .copy-val { flex: 1; font-family: monospace; font-size: 12px;
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .copy-btn {
-    flex-shrink: 0; cursor: pointer; background: none; border: none;
-    color: var(--muted); font-size: 15px; padding: 0 2px; line-height: 1; transition: color .15s;
-  }
-  .copy-btn:hover { color: var(--fg); }
-  .copy-btn.ok    { color: var(--green) !important; }
+/* ── profile card ── */
+#profile-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:12px;
+  display:flex;align-items:center;gap:12px;margin-bottom:14px
+}
+#profile-av{
+  width:52px;height:52px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:700;color:#fff;user-select:none
+}
+.profile-fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.profile-fields input{font-size:12px}
+.profile-fields input:first-child{font-weight:600}
 
-  /* ── icon button ── */
-  .icon-btn {
-    flex-shrink: 0; cursor: pointer; background: var(--card); border: 1px solid var(--border);
-    color: var(--fg); border-radius: 4px; padding: 5px 8px; font-size: 13px;
-    line-height: 1; transition: background .15s;
-  }
-  .icon-btn:hover { background: var(--border); }
+/* ── divider ── */
+.divider{display:flex;align-items:center;gap:8px;margin:10px 0;color:var(--muted);font-size:11px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
 
-  /* ── action buttons ── */
-  .actions { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
-  .btn {
-    width: 100%; padding: 7px 10px; border-radius: 4px;
-    border: none; cursor: pointer; font-size: 12px; font-weight: 500;
-    text-align: center; transition: opacity .15s;
-  }
-  .btn:hover:not(:disabled) { opacity: .82; }
-  .btn:active:not(:disabled) { opacity: .65; }
-  .btn:disabled { opacity: .45; cursor: default; }
-  .btn-primary   { background: var(--accent); color: #fff; }
-  .btn-secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
-  .btn-danger    { background: #c0392b22; color: var(--danger); border: 1px solid #c0392b44; }
+/* ── buttons ── */
+.btn{
+  width:100%;padding:8px 12px;border-radius:var(--radius);
+  border:none;cursor:pointer;font-size:13px;font-weight:600;
+  text-align:center;transition:filter .15s,opacity .15s;letter-spacing:.01em
+}
+.btn:hover:not(:disabled){filter:brightness(1.12)}
+.btn:active:not(:disabled){filter:brightness(.9)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-outline{background:transparent;color:var(--fg);border:1px solid var(--border)}
+.btn-outline:hover:not(:disabled){background:var(--card)}
+.btn-danger{background:#e0525212;color:var(--danger);border:1px solid #e0525230}
 
-  /* ── error banner ── */
-  #err {
-    background: #c0392b18; border: 1px solid #c0392b44; border-radius: 4px;
-    color: #e57373; font-size: 12px; padding: 6px 10px; margin-top: 10px;
-  }
+/* ── error / status ── */
+#err{
+  background:#e0525210;border:1px solid #e0525230;border-radius:var(--radius);
+  color:#f08080;font-size:12px;padding:7px 10px;margin-top:8px;line-height:1.4
+}
+#loading{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  color:var(--muted);font-size:12px;padding:6px 0;margin-top:4px
+}
+.spinner{
+  width:14px;height:14px;border:2px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin .7s linear infinite;flex-shrink:0
+}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-  /* ── loading text ── */
-  #loading { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; }
+/* ── room join row ── */
+.join-row{display:flex;flex-direction:column;gap:6px}
 
-  /* ── profile avatar ── */
-  .profile-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
-  #profile-avatar {
-    width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
-    background: var(--card); border: 1px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px; font-weight: 700; overflow: hidden;
-  }
-  #profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
-  .profile-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* ══ CONNECTED ════════════════════════════════════════════════════ */
+/* room card */
+.room-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:12px;margin-bottom:12px
+}
+.room-status-row{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+#sync-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--muted);flex-shrink:0
+}
+#sync-dot.on{background:var(--green);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.room-status-label{font-size:11px;color:var(--muted);flex:1}
+#conn-badge{display:none}
 
-  /* ── room ID input row ── */
-  #room-join-row { margin-top: 8px; }
+.room-id-row{
+  display:flex;align-items:center;gap:6px;
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:4px;padding:6px 10px;margin-bottom:6px
+}
+.room-id-val{
+  flex:1;font-family:monospace;font-size:13px;font-weight:700;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.04em
+}
+.copy-btn{
+  flex-shrink:0;cursor:pointer;background:none;border:none;
+  color:var(--muted);font-size:16px;padding:0 2px;line-height:1;transition:color .15s
+}
+.copy-btn:hover{color:var(--fg)}
+.copy-btn.ok{color:var(--green)!important}
 
-  /* ── connected ── */
-  #sync-dot { width: 8px; height: 8px; border-radius: 50%;
-              background: var(--muted); display: inline-block; margin-right: 6px; }
-  #sync-dot.active { background: var(--green); animation: pulse 1.5s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-  #peer-count { color: var(--muted); font-size: 11px; margin-left: auto; }
+.room-hint{font-size:11px;color:var(--muted);line-height:1.5}
+.room-server{font-size:11px;color:var(--muted);margin-top:6px;
+             overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-  .peer { display: flex; align-items: center; gap: 10px;
-          padding: 6px 4px; border-radius: 4px; transition: background .15s; }
-  .peer:hover { background: var(--card); }
-  .avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 11px; font-weight: 700; overflow: hidden; }
-  .avatar img { width: 100%; height: 100%; object-fit: cover; }
-  .peer-info { flex: 1; min-width: 0; }
-  .peer-name   { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .peer-detail { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #empty { color: var(--muted); text-align: center; padding: 20px 0; font-style: italic; font-size: 12px; }
-  hr { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
-  .server-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px; color: var(--muted); }
+/* peers */
+.section-hdr{
+  display:flex;align-items:center;gap:6px;margin-bottom:6px;
+  font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)
+}
+#peer-count{background:var(--card);border:1px solid var(--border);
+            padding:1px 5px;border-radius:10px;font-size:10px;color:var(--muted)}
+.peer{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 6px;border-radius:4px;transition:background .15s
+}
+.peer:hover{background:var(--card)}
+.peer-av{
+  width:30px;height:30px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:#fff
+}
+.peer-info{flex:1;min-width:0}
+.peer-name{font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.peer-detail{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+#empty{color:var(--muted);text-align:center;padding:16px 0;font-size:12px}
 </style>
 </head>
 <body>
 
-<!-- ── NOT CONNECTED ── -->
-<div id="not-connected">
-  <div style="display:flex;align-items:center;margin-bottom:8px">
-    <span style="font-weight:600">⟡ OpenIDEA Collab</span>
+<!-- ══ NOT CONNECTED ══════════════════════════════════════════════ -->
+<div id="nc">
+
+  <div class="hdr">
+    <span class="hdr-logo">⟡ OpenIDEA Collab</span>
+    <span class="hdr-spacer"></span>
     <span id="nc-badge" class="badge"></span>
+    <button class="gear-btn" title="Configurações do servidor" onclick="toggleSettings()">⚙</button>
   </div>
 
-  <div class="lbl">Servidor</div>
-  <div class="input-row">
-    <input type="text" id="inp-server" placeholder="http://localhost:4444" value="__SERVER_URL__">
-    <button class="icon-btn" title="Salvar servidor" onclick="doSetServer()">📡</button>
-  </div>
-
-  <div class="lbl">Seu Perfil</div>
-  <div class="profile-row">
-    <div id="profile-avatar"><span id="avatar-initials">?</span></div>
-    <div class="profile-fields">
-      <input type="text" id="inp-name" placeholder="Seu nome" value="__INIT_NAME__">
-      <input type="text" id="inp-github" placeholder="GitHub username" value="__INIT_GITHUB__">
+  <!-- server drawer (collapsed by default) -->
+  <div id="server-drawer" hidden>
+    <div class="drawer-lbl">Servidor</div>
+    <div class="drawer-row">
+      <input type="text" id="inp-server" value="__SERVER_URL__" placeholder="http://localhost:4444">
+      <button class="btn btn-outline" style="width:auto;padding:5px 10px;font-size:12px"
+              onclick="doSetServer()">Salvar</button>
     </div>
+  </div>
+
+  <!-- profile card -->
+  <div id="profile-card">
+    <div id="profile-av">?</div>
+    <div class="profile-fields">
+      <input type="text" id="inp-name"   placeholder="Seu nome"            value="__INIT_NAME__">
+      <input type="text" id="inp-github" placeholder="@github (opcional)"  value="__INIT_GITHUB__">
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-create" onclick="doCreate()">＋  Criar Nova Sala</button>
+
+  <div class="divider">ou entrar numa sala</div>
+
+  <div class="join-row">
+    <input type="text" id="inp-room" placeholder="Room ID">
+    <button class="btn btn-outline" id="btn-join" onclick="doJoin()">→  Entrar na Sala</button>
   </div>
 
   <div id="err" hidden></div>
-  <div id="loading" hidden></div>
+  <div id="loading" hidden><div class="spinner"></div><span id="loading-text"></span></div>
 
-  <div class="actions">
-    <button class="btn btn-primary" id="btn-create" onclick="doCreate()">＋  Criar Sala</button>
-    <div id="room-join-row">
-      <input type="text" id="inp-room" placeholder="Room ID para entrar…" style="width:100%;margin-bottom:6px">
-      <button class="btn btn-secondary" id="btn-join" onclick="doJoin()">→  Entrar na Sala</button>
-    </div>
-  </div>
-</div>
+</div><!-- /nc -->
 
-<!-- ── CONNECTED ── -->
+<!-- ══ CONNECTED ════════════════════════════════════════════════════ -->
 <div id="app" hidden>
-  <div style="display:flex;align-items:center;margin-bottom:4px">
-    <span id="sync-dot"></span>
-    <span style="flex:1;font-size:11px;color:var(--muted)">sala ativa</span>
-    <span id="peer-count" style="font-size:11px;color:var(--muted)"></span>
+
+  <div class="hdr">
+    <span class="hdr-logo">⟡ OpenIDEA Collab</span>
+    <span class="hdr-spacer"></span>
+    <span id="conn-badge" class="badge"></span>
   </div>
 
-  <div class="copy-row" style="margin-bottom:4px">
-    <span class="copy-val" id="room-id">—</span>
-    <button class="copy-btn" title="Copiar Room ID" onclick="cp('room-id',this)">⎘</button>
-  </div>
-  <div style="color:var(--muted);font-size:11px;margin-bottom:8px">
-    Compartilhe esse ID — o colaborador entra pelo painel dele
+  <!-- room card -->
+  <div class="room-card">
+    <div class="room-status-row">
+      <span id="sync-dot"></span>
+      <span class="room-status-label">Sala ativa — sincronizando arquivos</span>
+    </div>
+    <div class="room-id-row">
+      <span class="room-id-val" id="room-id">—</span>
+      <button class="copy-btn" title="Copiar Room ID" onclick="cp('room-id',this)">⎘</button>
+    </div>
+    <div class="room-hint">
+      Compartilhe o Room ID acima com seu colaborador.<br>
+      Ele abre o painel OpenIDEA Collab → "Entrar na Sala" → cola o ID.
+    </div>
+    <div class="room-server" id="conn-server"></div>
   </div>
 
-  <div class="server-row">
-    <span id="conn-server" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-    <span id="conn-badge" class="badge" style="display:none"></span>
+  <!-- peer list -->
+  <div class="section-hdr">
+    Colaboradores
+    <span id="peer-count"></span>
   </div>
-
-  <hr>
   <div id="peers"></div>
-  <div id="empty" hidden>Nenhum colaborador ainda</div>
+  <div id="empty" hidden>Aguardando colaboradores entrar…</div>
 
-  <div class="actions" style="margin-top:16px">
+  <div style="margin-top:14px">
     <button class="btn btn-danger" onclick="doLeave()">↩  Sair da Sala</button>
   </div>
-</div>
+
+</div><!-- /app -->
 
 <script>
-  const IS_DEV = __IS_DEV__;
-  const initServerUrl = '__SERVER_URL__';
+var IS_DEV = __IS_DEV__;
+var initServerUrl = '__SERVER_URL__';
+var $nc  = document.getElementById('nc');
+var $app = document.getElementById('app');
+var settingsOpen = false;
 
-  const $nc  = document.getElementById('not-connected');
-  const $app = document.getElementById('app');
+function toggleSettings() {
+  settingsOpen = !settingsOpen;
+  document.getElementById('server-drawer').hidden = !settingsOpen;
+}
 
-  // Lazy: openidea may be injected after page load
-  function sendMsg(obj) {
-    try {
-      if (typeof openidea !== 'undefined') {
-        openidea.postMessage(JSON.stringify(obj));
-      } else {
-        showErr('openidea API não disponível — tente reabrir o painel');
-      }
-    } catch(e) { showErr('Erro ao enviar: ' + e.message); }
-  }
-
-  function showErr(msg) {
-    const e = document.getElementById('err');
-    e.textContent = msg; e.hidden = false;
-  }
-  function hideErr() { document.getElementById('err').hidden = true; }
-
-  function setLoading(on, text) {
-    document.getElementById('loading').hidden = !on;
-    document.getElementById('loading').textContent = on ? (text||'') : '';
-    document.getElementById('btn-create').disabled = on;
-    document.getElementById('btn-join').disabled   = on;
-  }
-
-  function setBadge(el, dev) {
-    el.textContent = dev ? 'DEV' : 'Published';
-    el.className   = 'badge ' + (dev ? 'badge-dev' : 'badge-pub');
-    el.style.display = '';
-  }
-
-  function cp(id, btn) {
-    const val = document.getElementById(id).textContent;
-    function ok() {
-      btn.classList.add('ok'); btn.textContent = '✓';
-      setTimeout(function(){ btn.classList.remove('ok'); btn.textContent = '⎘'; }, 1500);
+/* ── messaging ───────────────────────────────────────────────────── */
+function sendMsg(obj) {
+  try {
+    if (typeof openidea !== 'undefined') {
+      openidea.postMessage(JSON.stringify(obj));
+    } else {
+      showErr('API do OpenIDEA não disponível — reabra o painel e tente novamente.');
     }
-    function fallback() {
-      var tmp = document.createElement('input');
-      tmp.value = val; document.body.appendChild(tmp); tmp.select();
-      try { document.execCommand('copy'); ok(); } catch(e) {}
-      document.body.removeChild(tmp);
+  } catch(e) { showErr('Erro: ' + e.message); }
+}
+
+/* ── error / loading ─────────────────────────────────────────────── */
+function showErr(msg) {
+  var e = document.getElementById('err');
+  e.textContent = msg; e.hidden = false;
+}
+function hideErr() { document.getElementById('err').hidden = true; }
+
+function setLoading(on, text) {
+  var el = document.getElementById('loading');
+  el.hidden = !on;
+  if (on) document.getElementById('loading-text').textContent = text || '';
+  document.getElementById('btn-create').disabled = on;
+  document.getElementById('btn-join').disabled = on;
+}
+
+/* ── avatar ──────────────────────────────────────────────────────── */
+function hashColor(s) {
+  if (!s) return '#607d8b';
+  var h = 0;
+  for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffff;
+  return 'hsl(' + (h % 360) + ',40%,40%)';
+}
+function initials(name) {
+  if (!name) return '?';
+  return name.trim().split(/\s+/).map(function(w){return w[0]||'';}).join('').toUpperCase().slice(0,2) || name[0].toUpperCase();
+}
+function updateAvatar() {
+  var name = document.getElementById('inp-name').value;
+  var gh   = document.getElementById('inp-github').value.trim();
+  var av   = document.getElementById('profile-av');
+  var seed = gh || name;
+  av.style.background = hashColor(seed);
+  av.textContent = initials(name);
+}
+document.getElementById('inp-name').addEventListener('input', updateAvatar);
+document.getElementById('inp-github').addEventListener('input', updateAvatar);
+
+/* ── clipboard ───────────────────────────────────────────────────── */
+function cp(id, btn) {
+  var val = document.getElementById(id).textContent;
+  function ok() {
+    btn.classList.add('ok'); btn.textContent = '✓';
+    setTimeout(function(){ btn.classList.remove('ok'); btn.textContent = '⎘'; }, 1600);
+  }
+  function fb() {
+    var t = document.createElement('input');
+    t.value = val; document.body.appendChild(t); t.select();
+    try { document.execCommand('copy'); ok(); } catch(_) {}
+    document.body.removeChild(t);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(val).then(ok, fb);
+  } else { fb(); }
+}
+
+/* ── badge ───────────────────────────────────────────────────────── */
+function setBadge(el, dev) {
+  if (!el) return;
+  el.textContent = dev ? 'DEV' : '';
+  el.className = 'badge ' + (dev ? 'badge-dev' : 'badge-pub');
+  el.style.display = dev ? '' : 'none';
+}
+
+/* ── actions ─────────────────────────────────────────────────────── */
+function doSetServer() {
+  var url = document.getElementById('inp-server').value.trim().replace(/\/+$/, '');
+  if (!url) { showErr('URL não pode ser vazia'); return; }
+  hideErr();
+  sendMsg({ type: 'set-server', url: url });
+}
+
+function doCreate() {
+  var name   = document.getElementById('inp-name').value.trim();
+  var github = document.getElementById('inp-github').value.trim().replace(/^@/, '');
+  if (!name) { showErr('Informe seu nome antes de criar a sala.'); return; }
+  hideErr(); setLoading(true, 'Criando sala…');
+  sendMsg({ type: 'create-room', name: name, github: github || null });
+}
+
+function doJoin() {
+  var room_id = document.getElementById('inp-room').value.trim();
+  var name    = document.getElementById('inp-name').value.trim();
+  var github  = document.getElementById('inp-github').value.trim().replace(/^@/, '');
+  if (!room_id) { showErr('Cole o Room ID que seu colaborador compartilhou.'); return; }
+  if (!name)    { showErr('Informe seu nome antes de entrar.'); return; }
+  hideErr(); setLoading(true, 'Entrando na sala…');
+  sendMsg({ type: 'join-room', room_id: room_id, name: name, github: github || null });
+}
+
+function doLeave() {
+  sendMsg({ type: 'leave-room' });
+}
+
+/* ── render ──────────────────────────────────────────────────────── */
+function render(state) {
+  if (!state || !state.room_id) {
+    $nc.hidden = false; $app.hidden = true;
+    setLoading(false); return;
+  }
+  $nc.hidden = true; $app.hidden = false;
+
+  document.getElementById('room-id').textContent = state.room_id;
+  document.getElementById('sync-dot').className  = state.sync_active ? 'on' : '';
+  document.getElementById('conn-server').textContent = state.server_url ? '🌐 ' + state.server_url : '';
+  setBadge(document.getElementById('conn-badge'), state.is_dev);
+
+  var peers = state.peers || [];
+  var pc = document.getElementById('peer-count');
+  pc.textContent = peers.length ? peers.length : '';
+  pc.style.display = peers.length ? '' : 'none';
+
+  var pl = document.getElementById('peers');
+  pl.innerHTML = '';
+  peers.forEach(function(p) {
+    var row = document.createElement('div');
+    row.className = 'peer';
+    var av = document.createElement('div');
+    av.className = 'peer-av';
+    av.style.background = hashColor(p.github || p.name || '');
+    av.textContent = initials(p.name);
+    var inf = document.createElement('div');
+    inf.className = 'peer-info';
+    var nm = document.createElement('div');
+    nm.className = 'peer-name';
+    nm.textContent = p.name + (p.github ? ' @' + p.github : '');
+    inf.appendChild(nm);
+    if (p.file) {
+      var dt = document.createElement('div');
+      dt.className = 'peer-detail';
+      dt.textContent = (p.line != null) ? p.file + ':' + (p.line + 1) : p.file;
+      inf.appendChild(dt);
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(val).then(ok, fallback);
-    } else { fallback(); }
-  }
+    row.appendChild(av); row.appendChild(inf);
+    pl.appendChild(row);
+  });
+  document.getElementById('empty').hidden = peers.length > 0;
+}
 
-  // Avatar: colored initials only (sandbox blocks external images)
-  function hashColor(str) {
-    if (!str) return '#607d8b';
-    let h = 0;
-    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffff;
-    return 'hsl(' + (h % 360) + ',38%,42%)';
-  }
-  function getInitials() {
-    const name = document.getElementById('inp-name').value.trim();
-    if (!name) return '?';
-    return name.split(/\s+/).map(function(w){ return w[0]; }).join('').toUpperCase().slice(0,2);
-  }
-  function updateAvatar() {
-    const gh = document.getElementById('inp-github').value.trim();
-    const av = document.getElementById('profile-avatar');
-    const ini = getInitials();
-    const seed = gh || document.getElementById('inp-name').value.trim();
-    av.style.background = hashColor(seed);
-    av.innerHTML = '<span>' + ini + '</span>';
-  }
-  document.getElementById('inp-github').addEventListener('input', updateAvatar);
-  document.getElementById('inp-name').addEventListener('input', updateAvatar);
+/* ── boot ────────────────────────────────────────────────────────── */
+setBadge(document.getElementById('nc-badge'), IS_DEV);
+updateAvatar();
 
-  function doSetServer() {
-    const url = document.getElementById('inp-server').value.trim().replace(/\/+$/, '');
-    if (!url) { showErr('URL do servidor não pode ser vazio'); return; }
-    hideErr();
-    sendMsg({ type: 'set-server', url });
-  }
-
-  function doCreate() {
-    const name   = document.getElementById('inp-name').value.trim();
-    const github = document.getElementById('inp-github').value.trim();
-    if (!name) { showErr('Informe seu nome'); return; }
-    hideErr(); setLoading(true, 'Criando sala…');
-    sendMsg({ type: 'create-room', name, github: github || null });
-  }
-
-  function doJoin() {
-    const room_id = document.getElementById('inp-room').value.trim();
-    const name    = document.getElementById('inp-name').value.trim();
-    const github  = document.getElementById('inp-github').value.trim();
-    if (!room_id) { showErr('Informe o Room ID'); return; }
-    if (!name)    { showErr('Informe seu nome');  return; }
-    hideErr(); setLoading(true, 'Entrando na sala…');
-    sendMsg({ type: 'join-room', room_id, name, github: github || null });
-  }
-
-  function doLeave() { sendMsg({ type: 'leave-room' }); }
-
-  function render(state) {
-    if (!state.room_id) {
-      $nc.hidden  = false;
-      $app.hidden = true;
-      setLoading(false);
-      return;
+function setupListener() {
+  try {
+    if (typeof openidea !== 'undefined') {
+      openidea.onMessage(function(raw) {
+        try {
+          var msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (msg.type === 'state')        { render(msg.state); setLoading(false); }
+          else if (msg.type === 'error')   { showErr(msg.message); setLoading(false); }
+          else if (msg.type === 'server-saved') {
+            document.getElementById('inp-server').value = msg.url;
+          }
+        } catch(_) {}
+      });
+      return true;
     }
-    $nc.hidden  = true;
-    $app.hidden = false;
-    document.getElementById('room-id').textContent     = state.room_id;
-    document.getElementById('sync-dot').className      = state.sync_active ? 'active' : '';
-    document.getElementById('conn-server').textContent = state.server_url || initServerUrl;
-    const cb = document.getElementById('conn-badge');
-    cb.textContent   = state.is_dev ? 'DEV' : 'Published';
-    cb.className     = 'badge ' + (state.is_dev ? 'badge-dev' : 'badge-pub');
-    cb.style.display = '';
-
-    const peers = state.peers || [];
-    const pc = document.getElementById('peer-count');
-    pc.textContent = peers.length ? peers.length + ' peer' + (peers.length>1?'s':'') : '';
-    const pl = document.getElementById('peers');
-    pl.innerHTML = '';
-    peers.forEach(function(p) {
-      const row = document.createElement('div');
-      row.className = 'peer';
-      const av = document.createElement('div');
-      av.className = 'avatar';
-      av.textContent = p.initials || (p.name ? p.name[0].toUpperCase() : '?');
-      av.style.background = hashColor(p.github || p.name || '');
-      const info = document.createElement('div');
-      info.className = 'peer-info';
-      const nm = document.createElement('div');
-      nm.className = 'peer-name';
-      nm.textContent = p.github ? p.name + ' @' + p.github : p.name;
-      info.appendChild(nm);
-      if (p.file) {
-        const dt = document.createElement('div');
-        dt.className = 'peer-detail';
-        dt.textContent = p.line != null ? p.file + ' :' + (p.line+1) : p.file;
-        info.appendChild(dt);
-      }
-      row.appendChild(av); row.appendChild(info);
-      pl.appendChild(row);
-    });
-    document.getElementById('empty').hidden = peers.length > 0;
-  }
-
-  // Boot
-  setBadge(document.getElementById('nc-badge'), IS_DEV);
-  updateAvatar();
-
-  function setupMsgListener() {
-    try {
-      if (typeof openidea !== 'undefined') {
-        openidea.onMessage(function(raw) {
-          try {
-            const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
-            if (msg.type === 'state')         { render(msg.state); setLoading(false); }
-            else if (msg.type === 'error')    { showErr(msg.message); setLoading(false); }
-            else if (msg.type === 'server-saved') {
-              document.getElementById('inp-server').value = msg.url;
-            }
-          } catch(e) {}
-        });
-        return true;
-      }
-    } catch(e) {}
-    return false;
-  }
-  // Try now; retry once after a short delay in case the API is injected late
-  if (!setupMsgListener()) {
-    setTimeout(function(){ if (!setupMsgListener()) setTimeout(setupMsgListener, 500); }, 100);
-  }
+  } catch(_) {}
+  return false;
+}
+if (!setupListener()) {
+  setTimeout(function(){ if (!setupListener()) setTimeout(setupListener, 800); }, 150);
+}
 </script>
 </body>
 </html>"#;
