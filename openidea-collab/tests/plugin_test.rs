@@ -1,4 +1,4 @@
-use openidea_collab::presence::{PresenceState, PeerPresence};
+use openidea_collab::presence::PresenceState;
 use openidea_collab::room::RoomState;
 
 #[test]
