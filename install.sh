@@ -157,7 +157,9 @@ install_server() {
 
     info "Building collab-server from source..."
     cargo build --release --manifest-path "$SRC_DIR/collab-server/Cargo.toml"
-    # Use install -m 755 instead of cp — atomically replaces the binary
+    # Remove before copy: unlinking the old inode lets the running process
+    # keep its file descriptor while we write a fresh binary (avoids ETXTBSY).
+    rm -f "$INSTALL_DIR/collab-server"
     install -m 755 "$SRC_DIR/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
     ok "collab-server built → $INSTALL_DIR/collab-server"
 }
