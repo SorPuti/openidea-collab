@@ -167,11 +167,11 @@ run_step() {
     _spin_loop "$msg" &
     SPIN_PID=$!
     if "$@" >> "$LOG" 2>&1; then
-        kill "$SPIN_PID" 2>/dev/null; wait "$SPIN_PID" 2>/dev/null; SPIN_PID=""
+        kill "$SPIN_PID" 2>/dev/null; disown "$SPIN_PID" 2>/dev/null; SPIN_PID=""
         printf "\r   ${G}✓${X}  ${D}[${STEP_N}/${STEP_TOTAL}]${X}  ${msg}             \n"
     else
         local code=$?
-        kill "$SPIN_PID" 2>/dev/null; wait "$SPIN_PID" 2>/dev/null; SPIN_PID=""
+        kill "$SPIN_PID" 2>/dev/null; disown "$SPIN_PID" 2>/dev/null; SPIN_PID=""
         printf "\r   ${R}✗${X}  ${D}[${STEP_N}/${STEP_TOTAL}]${X}  ${msg}             \n"
         echo
         echo -e "   ${R}$(t err_title)${X}"
@@ -288,7 +288,7 @@ _do_rust() {
     # Check via filesystem — avoids slow rustup network lock
     local sysroot
     sysroot=$(rustup show home 2>/dev/null || echo "$HOME/.rustup")
-    if ! find "$sysroot/toolchains" -maxdepth 3 -name "wasm32-wasip2" -type d 2>/dev/null | grep -q .; then
+    if ! find "$sysroot/toolchains" -maxdepth 5 -name "wasm32-wasip2" -type d 2>/dev/null | grep -q .; then
         rustup target add wasm32-wasip2
     fi
 }
