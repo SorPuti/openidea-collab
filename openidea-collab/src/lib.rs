@@ -8,7 +8,7 @@ pub mod sync;
 use openidea_plugin::{
     host, register_plugin, Context, Error, Event, EventKind, Invocation,
     NotificationLevel, Plugin,
-    views::{Body, View, Viewport, Views},
+    views::{Body, Button, View, ViewEvent, Viewport, Views},
 };
 use client::CollabClient;
 use sync::SyncState;
@@ -78,13 +78,19 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
     display: flex; align-items: center; gap: 0;
     font-weight: 600; margin-bottom: 2px;
   }
-  #hint {
-    color: var(--muted); font-size: 11px; margin-top: 12px; line-height: 1.5;
+
+  /* ── action buttons ── */
+  .actions { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+  .btn {
+    width: 100%; padding: 7px 10px; border-radius: 4px;
+    border: none; cursor: pointer; font-size: 12px; font-weight: 500;
+    text-align: center; transition: opacity .15s;
   }
-  #hint kbd {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 3px; padding: 1px 4px; font-size: 11px;
-  }
+  .btn:hover { opacity: .82; }
+  .btn:active { opacity: .65; }
+  .btn-primary   { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
+  .btn-danger    { background: #c0392b22; color: #c0392b; border: 1px solid #c0392b44; }
 
   /* ── connected ── */
   #sync-dot { width: 8px; height: 8px; border-radius: 50%;
@@ -122,9 +128,9 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
     <button class="copy-btn" title="Copiar URL" onclick="cp('nc-server',this)">⎘</button>
   </div>
 
-  <div id="hint">
-    <kbd>Ctrl+Shift+P</kbd> → <strong>Collab: Create Room</strong><br>
-    para criar uma sala e compartilhar o ID com colegas.
+  <div class="actions">
+    <button class="btn btn-primary"   onclick="sendMsg('create-room')">＋  Criar Sala</button>
+    <button class="btn btn-secondary" onclick="sendMsg('join-room')">→  Entrar na Sala</button>
   </div>
 </div>
 
@@ -146,6 +152,10 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
   <hr>
   <div id="peers"></div>
   <div id="empty" hidden>Nenhum colaborador ainda</div>
+
+  <div class="actions" style="margin-top:16px">
+    <button class="btn btn-danger" onclick="sendMsg('leave-room')">↩  Sair da Sala</button>
+  </div>
 </div>
 
 <script>
@@ -232,12 +242,20 @@ const PANEL_HTML: &str = r#"<!DOCTYPE html>
     $em.hidden = peers.length > 0;
   }
 
-  window.addEventListener('message', e => {
-    try {
-      const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-      if (msg?.type === 'state') render(msg.state);
-    } catch {}
-  });
+  function sendMsg(cmd) {
+    if (typeof openidea !== 'undefined') {
+      openidea.postMessage(JSON.stringify({ type: 'command', id: cmd }));
+    }
+  }
+
+  if (typeof openidea !== 'undefined') {
+    openidea.onMessage(function(raw) {
+      try {
+        const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (msg?.type === 'state') render(msg.state);
+      } catch {}
+    });
+  }
 </script>
 </body>
 </html>"#;
@@ -455,7 +473,40 @@ impl Views for CollabPlugin {
         let html = PANEL_HTML
             .replace("__SERVER_URL__", &server_url)
             .replace("__IS_DEV__", if IS_DEV { "true" } else { "false" });
-        Ok(View::new(Body::Html(html)))
+        let view = View::new(Body::Html(html));
+        // Toolbar buttons change based on room state
+        let view = if self.sync.room.is_some() {
+            view.button(Button::new("leave-room", "Leave Room").icon("close"))
+        } else {
+            view
+                .button(Button::new("create-room", "Create Room").icon("add"))
+                .button(Button::new("join-room", "Join Room").icon("arrow-right"))
+        };
+        Ok(view)
+    }
+
+    fn handle(&mut self, view: &str, event: ViewEvent, ctx: &Invocation) -> Result<(), Error> {
+        if view != VIEW_COLLAB_PANEL {
+            return Ok(());
+        }
+        let cmd = match &event {
+            // Toolbar button click
+            ViewEvent::Button(id) => id.as_str(),
+            // HTML panel button via openidea.postMessage(...)
+            ViewEvent::Message(raw) => {
+                if let Ok(msg) = serde_json::from_str::<serde_json::Value>(raw) {
+                    if msg.get("type").and_then(|t| t.as_str()) == Some("command") {
+                        if let Some(id) = msg.get("id").and_then(|id| id.as_str()) {
+                            let _ = self.run_command(id, ctx, None);
+                        }
+                    }
+                }
+                return Ok(());
+            }
+            _ => return Ok(()),
+        };
+        let _ = self.run_command(cmd, ctx, None);
+        Ok(())
     }
 }
 
