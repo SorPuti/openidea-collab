@@ -3,12 +3,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use axum::{
-    Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
-    Json,
+    Json, Router,
 };
 use rand::distributions::Alphanumeric;
 use rand::Rng;
@@ -89,10 +88,7 @@ pub fn router(state: AppState) -> Router {
         .route("/rooms/:id", get(get_room))
         .route("/rooms/:id/join", post(join_room))
         .route("/rooms/:id/members/:uid", delete(leave_room))
-        .route(
-            "/rooms/:id/files/*path",
-            post(update_file).get(get_file),
-        )
+        .route("/rooms/:id/files/*path", post(update_file).get(get_file))
         .route("/rooms/:id/members", get(get_members))
         .route("/rooms/:id/events", get(get_events))
         .with_state(state)
@@ -107,11 +103,9 @@ async fn create_room(State(state): State<AppState>) -> Response {
         .map(char::from)
         .collect();
 
-    let result = state
-        .lock()
-        .map(|mut guard| {
-            guard.insert(room_id.clone(), Room::new(room_id.clone()));
-        });
+    let result = state.lock().map(|mut guard| {
+        guard.insert(room_id.clone(), Room::new(room_id.clone()));
+    });
 
     match result {
         Ok(()) => (StatusCode::CREATED, Json(CreateRoomResponse { room_id })).into_response(),
@@ -206,11 +200,7 @@ async fn update_file(
             }
         }
 
-        let next_version = room
-            .files
-            .get(&path)
-            .map(|f| f.version + 1)
-            .unwrap_or(1);
+        let next_version = room.files.get(&path).map(|f| f.version + 1).unwrap_or(1);
 
         room.files.insert(
             path.clone(),
