@@ -101,6 +101,54 @@ box() {  # box "title" [color]
     echo -e "   ${W}╰$(printf '─%.0s' $(seq 1 $w))╯${X}"
 }
 
+# ── Arrow-key menu ─────────────────────────────────────────────────────────────
+# Usage: menu_pick "opt1|description" "opt2|description" ...
+# Sets MENU_IDX to selected index (0-based)
+MENU_IDX=0
+menu_pick() {
+    local -a labels descs
+    local n=0
+    for arg in "$@"; do
+        labels[$n]="${arg%%|*}"
+        descs[$n]="${arg#*|}"
+        n=$((n+1))
+    done
+    local idx=0
+
+    _draw() {
+        local i
+        for i in $(seq 0 $((n-1))); do
+            printf "\033[K"   # clear line
+            if [ "$i" -eq "$idx" ]; then
+                printf "   ${C}▶  ${W}${BOLD}%-18s${X}  ${descs[$i]}\n" "${labels[$i]}"
+            else
+                printf "   ${D}   %-18s  ${descs[$i]}${X}\n" "${labels[$i]}"
+            fi
+        done
+    }
+
+    cursor_off
+    _draw
+
+    while true; do
+        local key seq
+        IFS= read -rsn1 key
+        if [[ "$key" == $'\x1b' ]]; then
+            IFS= read -rsn2 -t 0.05 seq || seq=""
+            key="${key}${seq}"
+        fi
+        case "$key" in
+            $'\x1b[A') [ "$idx" -gt 0 ]        && idx=$((idx-1)) ;;  # ↑
+            $'\x1b[B') [ "$idx" -lt $((n-1)) ] && idx=$((idx+1)) ;;  # ↓
+            ''|$'\n'|$'\r') break ;;                                   # Enter
+        esac
+        printf "\033[%dA" "$n"   # move cursor back up
+        _draw
+    done
+    MENU_IDX=$idx
+    echo   # newline after selection
+}
+
 # ── Spinner + step runner ─────────────────────────────────────────────────────
 FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
 
@@ -158,18 +206,16 @@ check_existing() {
 
 # ── Screen 1 : language ───────────────────────────────────────────────────────
 screen_language() {
-    cls; cursor_on; echo
+    cls; echo
     echo -e "   ${C}${BOLD}⟡  OpenIDEA Collab${X}"
     echo
-    echo -e "   ${W}$(t lang_q)${X}"
+    echo -e "   ${W}Select language / Escolha o idioma${X}"
+    echo -e "   ${D}↑ ↓ para navegar  ·  Enter para confirmar${X}"
     echo
-    echo -e "   ${Y}1${X}  English"
-    echo -e "   ${Y}2${X}  Português (BR)  ${D}← padrão${X}"
-    echo
-    printf "   › "
-    read -r choice
-    cursor_off
-    [ "$choice" = "1" ] && LG="en" || LG="pt"
+    menu_pick \
+        "Português (BR)|Instalador em português  ${D}← padrão${X}" \
+        "English|Installer steps in English"
+    [ "$MENU_IDX" -eq 1 ] && LG="en" || LG="pt"
 }
 
 # ── Screen 2 : welcome ────────────────────────────────────────────────────────
@@ -229,9 +275,13 @@ screen_install() {
 _do_rust() {
     if ! command -v cargo &>/dev/null; then
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+        # shellcheck source=/dev/null
         source "$HOME/.cargo/env"
     fi
-    rustup target add wasm32-wasip2 2>/dev/null || true
+    # Only add target if not already present (avoids slow download on every run)
+    if ! rustup target list --installed 2>/dev/null | grep -q "^wasm32-wasip2"; then
+        rustup target add wasm32-wasip2
+    fi
 }
 
 _do_cli() {
