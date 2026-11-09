@@ -13,51 +13,53 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install Rust + wasm32-wasip2
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip2
+      - name: Install Rust stable + wasm32-wasip2
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target add wasm32-wasip2
 
-      - name: Cache Rust
+      - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            openidea-collab/target
-            collab-server/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run server tests
+        run: cargo test --manifest-path collab-server/Cargo.toml
 
       - name: Install openidea-plugin CLI
         run: cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
-
-      - name: Build server (verify it compiles)
-        run: cargo test --manifest-path collab-server/Cargo.toml
 
       - name: Build plugin WASM
         run: |
           cd openidea-collab
           openidea-plugin build
 
-      - name: Extract version
+      - name: Extract version from plugin.toml
         id: version
         run: |
           VERSION=$(grep '^version' openidea-collab/plugin.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Plugin version: $VERSION / Tag: ${GITHUB_REF_NAME}"
 
       - name: Write signing key
-        run: echo "${{ secrets.OPENIDEA_KEY }}" > /tmp/publisher.pem
+        run: printf '%s' "${{ secrets.OPENIDEA_KEY }}" > /tmp/publisher.pem
 
       - name: Pack plugin
         run: |
           mkdir -p dist-release
-          openidea-plugin pack openidea-collab \
+          cd openidea-collab
+          openidea-plugin pack . \
             --key /tmp/publisher.pem \
             --publisher "${{ secrets.OPENIDEA_PUBLISHER_ID }}" \
-            --out "dist-release/ai.l0ng.openidea-collab-${{ steps.version.outputs.version }}.oiplugin"
+            --out "../dist-release/sorputi.openidea-collab-${{ steps.version.outputs.version }}.oiplugin"
 
       - name: Generate marketplace index
         run: |
@@ -81,16 +83,13 @@ jobs:
 
             Plugin de colaboração em tempo real para o OpenIDEA IDE.
 
-            ### Instalar manualmente
-            Baixe `ai.l0ng.openidea-collab-${{ steps.version.outputs.version }}.oiplugin` e arraste para o OpenIDEA.
+            ### Instalar via marketplace
+            Em **Settings › Plugins › Available**, busque por `openidea-collab`.
 
-            ### Via marketplace (index.json)
-            Adicione este índice nas configurações do OpenIDEA:
-            ```
-            https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/index.json
-            ```
+            ### Instalar manualmente
+            Baixe o `.oiplugin` abaixo e arraste para o OpenIDEA.
           files: |
-            dist-release/ai.l0ng.openidea-collab-${{ steps.version.outputs.version }}.oiplugin
+            dist-release/sorputi.openidea-collab-${{ steps.version.outputs.version }}.oiplugin
             dist-release/index.json
           draft: false
           prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
