@@ -7,3 +7,6 @@ dist/
 dist-release/
 openidea-plugins/
 .openidea/
+construtor/
+docs/
+tasks/
