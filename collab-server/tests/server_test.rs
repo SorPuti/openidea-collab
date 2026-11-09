@@ -23,17 +23,17 @@ fn event_store_cursor() {
         user_id: "u1".into(),
         name: "Ana".into(),
     });
-    let events = store.since(0, 0); // timeout_ms=0: return immediately
+    let events = store.since(0);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].id, 0);
-    let empty = store.since(1, 0);
+    let empty = store.since(1);
     assert!(empty.is_empty());
 }
 
 #[test]
 fn event_store_cursor_overflow() {
     let store = EventStore::new();
-    let events = store.since(999999, 0);
+    let events = store.since(999999);
     assert!(events.is_empty());
 }
 

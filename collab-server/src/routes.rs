@@ -14,6 +14,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::document;
 use crate::events::{EventEnvelope, RoomEvent};
 use crate::room::{FileState, Member, Room};
 
@@ -60,6 +61,7 @@ struct FileUpdateRequest {
 #[derive(Serialize)]
 struct FileUpdateResponse {
     event_id: u64,
+    version: u64,
 }
 
 #[derive(Serialize)]
@@ -80,6 +82,11 @@ struct EventsResponse {
     next_cursor: u64,
 }
 
+#[derive(Deserialize)]
+struct PresenceRequest {
+    file: Option<String>,
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 
 pub fn router(state: AppState) -> Router {
@@ -91,6 +98,7 @@ pub fn router(state: AppState) -> Router {
         .route("/rooms/:id/files/*path", post(update_file).get(get_file))
         .route("/rooms/:id/members", get(get_members))
         .route("/rooms/:id/events", get(get_events))
+        .route("/rooms/:id/members/:uid/presence", post(post_presence))
         .with_state(state)
 }
 
@@ -179,51 +187,80 @@ async fn update_file(
 ) -> Response {
     let path = raw_path.trim_start_matches('/').to_string();
 
-    let result = state.lock().map(|mut guard| {
-        let room = match guard.get_mut(&id) {
-            Some(r) => r,
-            None => return Err(StatusCode::NOT_FOUND),
-        };
+    let result = state
+        .lock()
+        .map(|mut guard| -> Result<(u64, u64), Box<Response>> {
+            let room = match guard.get_mut(&id) {
+                Some(r) => r,
+                None => return Err(Box::new(StatusCode::NOT_FOUND.into_response())),
+            };
 
-        // Update presence for the requesting user.
-        room.update_presence(&body.user_id, Some(path.clone()));
+            // Update presence for the requesting user.
+            room.update_presence(&body.user_id, Some(path.clone()));
 
-        if let Some(file) = room.files.get(&path) {
-            // Conflict: server is ahead and was last touched by a different user.
-            if file.version != body.version && file.last_user != body.user_id {
-                let _ = room.events.push(RoomEvent::ConflictWarn {
-                    path: path.clone(),
-                    user_a: file.last_user.clone(),
-                    user_b: body.user_id.clone(),
-                });
-                return Err(StatusCode::CONFLICT);
-            }
-        }
+            // Extract conflict info before dropping the immutable borrow on room.files.
+            let conflict_info: Option<(String, String)> = room.files.get(&path).and_then(|file| {
+                if file.version != body.version && file.last_user != body.user_id {
+                    Some((file.last_user.clone(), file.text.clone()))
+                } else {
+                    None
+                }
+            });
 
-        let next_version = room.files.get(&path).map(|f| f.version + 1).unwrap_or(1);
+            // Resolve conflict or use incoming text directly.
+            let final_text = if let Some((last_user, server_text)) = conflict_info {
+                match document::merge3("", &body.text, &server_text) {
+                    Ok(merged) => merged,
+                    Err(_) => {
+                        room.events.push(RoomEvent::ConflictWarn {
+                            path: path.clone(),
+                            user_a: last_user,
+                            user_b: body.user_id.clone(),
+                        });
+                        return Err(Box::new(
+                            (
+                                StatusCode::CONFLICT,
+                                Json(serde_json::json!({
+                                    "error": "conflict",
+                                    "server_text": server_text
+                                })),
+                            )
+                                .into_response(),
+                        ));
+                    }
+                }
+            } else {
+                body.text
+            };
 
-        room.files.insert(
-            path.clone(),
-            FileState {
+            let next_version = room.files.get(&path).map(|f| f.version + 1).unwrap_or(1);
+
+            room.files.insert(
+                path.clone(),
+                FileState {
+                    version: next_version,
+                    text: final_text,
+                    last_user: body.user_id.clone(),
+                    last_updated: Instant::now(),
+                },
+            );
+
+            let event_id = room.events.push(RoomEvent::FileUpdated {
+                path,
                 version: next_version,
-                text: body.text,
-                last_user: body.user_id.clone(),
-                last_updated: Instant::now(),
-            },
-        );
+                user_id: body.user_id,
+            });
 
-        let event_id = room.events.push(RoomEvent::FileUpdated {
-            path,
-            version: next_version,
-            user_id: body.user_id,
+            Ok((event_id, next_version))
         });
 
-        Ok(event_id)
-    });
-
     match result {
-        Ok(Ok(event_id)) => (StatusCode::OK, Json(FileUpdateResponse { event_id })).into_response(),
-        Ok(Err(status)) => status.into_response(),
+        Ok(Ok((event_id, version))) => (
+            StatusCode::OK,
+            Json(FileUpdateResponse { event_id, version }),
+        )
+            .into_response(),
+        Ok(Err(boxed)) => *boxed,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
@@ -278,7 +315,7 @@ async fn get_events(
             .lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let room = guard.get(&id).ok_or(StatusCode::NOT_FOUND)?;
-        (room.events.since(cursor, 0), room.events.next_id())
+        (room.events.since(cursor), room.events.next_id())
     };
 
     if !initial_events.is_empty() {
@@ -294,17 +331,13 @@ async fn get_events(
     }
 
     // No events yet — long-poll: sleep 5 s outside the mutex.
-    tokio::task::spawn_blocking(|| {
-        std::thread::sleep(std::time::Duration::from_millis(5000));
-    })
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    tokio::time::sleep(std::time::Duration::from_millis(5000)).await;
 
     let guard = state
         .lock()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let room = guard.get(&id).ok_or(StatusCode::NOT_FOUND)?;
-    let events = room.events.since(cursor, 0);
+    let events = room.events.since(cursor);
     let next_cursor = events
         .iter()
         .map(|e| e.id + 1)
@@ -315,4 +348,24 @@ async fn get_events(
         events,
         next_cursor,
     }))
+}
+
+async fn post_presence(
+    Path((id, uid)): Path<(String, String)>,
+    State(state): State<AppState>,
+    Json(body): Json<PresenceRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let mut guard = state
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let room = guard.get_mut(&id).ok_or(StatusCode::NOT_FOUND)?;
+    if !room.members.contains_key(&uid) {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    room.update_presence(&uid, body.file.clone());
+    room.events.push(RoomEvent::PresenceChanged {
+        user_id: uid,
+        file: body.file,
+    });
+    Ok(StatusCode::NO_CONTENT)
 }
