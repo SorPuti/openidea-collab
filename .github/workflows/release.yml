@@ -1,0 +1,96 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust + wasm32-wasip2
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            openidea-collab/target
+            collab-server/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install openidea-plugin CLI
+        run: cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
+
+      - name: Build server (verify it compiles)
+        run: cargo test --manifest-path collab-server/Cargo.toml
+
+      - name: Build plugin WASM
+        run: |
+          cd openidea-collab
+          openidea-plugin build
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep '^version' openidea-collab/plugin.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Write signing key
+        run: echo "${{ secrets.OPENIDEA_KEY }}" > /tmp/publisher.pem
+
+      - name: Pack plugin
+        run: |
+          mkdir -p dist-release
+          openidea-plugin pack openidea-collab \
+            --key /tmp/publisher.pem \
+            --publisher "${{ secrets.OPENIDEA_PUBLISHER_ID }}" \
+            --out "dist-release/ai.l0ng.openidea-collab-${{ steps.version.outputs.version }}.oiplugin"
+
+      - name: Generate marketplace index
+        run: |
+          DOWNLOAD_BASE="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/"
+          openidea-plugin index dist-release \
+            --publisher "${{ secrets.OPENIDEA_PUBLISHER_ID }}" \
+            --key /tmp/publisher.pem \
+            --download-base "$DOWNLOAD_BASE" \
+            --out dist-release/index.json
+
+      - name: Shred signing key
+        if: always()
+        run: shred -u /tmp/publisher.pem 2>/dev/null || rm -f /tmp/publisher.pem
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "OpenIDEA Collab ${{ steps.version.outputs.tag }}"
+          body: |
+            ## OpenIDEA Collab ${{ steps.version.outputs.tag }}
+
+            Plugin de colaboração em tempo real para o OpenIDEA IDE.
+
+            ### Instalar manualmente
+            Baixe `ai.l0ng.openidea-collab-${{ steps.version.outputs.version }}.oiplugin` e arraste para o OpenIDEA.
+
+            ### Via marketplace (index.json)
+            Adicione este índice nas configurações do OpenIDEA:
+            ```
+            https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/index.json
+            ```
+          files: |
+            dist-release/ai.l0ng.openidea-collab-${{ steps.version.outputs.version }}.oiplugin
+            dist-release/index.json
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
