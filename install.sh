@@ -42,9 +42,8 @@ t() {
             s_rust)       echo "Rust toolchain" ;;
             s_wasm)       echo "WASM target (wasm32-wasip2)" ;;
             s_cli)        echo "openidea-plugin CLI" ;;
-            s_clone)      echo "Cloning repository" ;;
-            s_server)     echo "Building collab-server" ;;
-            s_plugin)     echo "Building plugin" ;;
+            s_server)     echo "collab-server" ;;
+            s_plugin)     echo "Plugin" ;;
             s_link)       echo "Linking plugin" ;;
             s_service)    echo "Setting up service" ;;
             s_verify)     echo "Verifying installation" ;;
@@ -76,9 +75,8 @@ t() {
             s_rust)       echo "Ferramentas Rust" ;;
             s_wasm)       echo "Alvo WASM (wasm32-wasip2)" ;;
             s_cli)        echo "CLI openidea-plugin" ;;
-            s_clone)      echo "Clonando repositório" ;;
-            s_server)     echo "Compilando collab-server" ;;
-            s_plugin)     echo "Compilando plugin" ;;
+            s_server)     echo "collab-server" ;;
+            s_plugin)     echo "Plugin" ;;
             s_link)       echo "Vinculando plugin" ;;
             s_service)    echo "Configurando serviço" ;;
             s_verify)     echo "Verificando instalação" ;;
@@ -306,9 +304,17 @@ _do_cli() {
     cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
 }
 
-_do_clone() {
+_ensure_src() {
+    [ -n "$SRC_DIR" ] && return
     SRC_DIR=$(mktemp -d)
     git clone --depth 1 "https://github.com/$REPO.git" "$SRC_DIR"
+}
+
+_platform() {
+    local arch os
+    case "$(uname -m)" in x86_64) arch="x86_64" ;; aarch64|arm64) arch="aarch64" ;; *) arch="" ;; esac
+    case "$(uname -s)" in Linux) os="linux" ;; Darwin) os="macos" ;; *) os="" ;; esac
+    [ -n "$arch" ] && [ -n "$os" ] && echo "${os}-${arch}" || echo ""
 }
 
 _do_server() {
@@ -317,10 +323,24 @@ _do_server() {
     systemctl --user stop collab-server.service 2>/dev/null || {
         local p="$HOME/Library/LaunchAgents/com.sorputi.collab-server.plist"
         [ -f "$p" ] && launchctl unload "$p" 2>/dev/null; } || true
-    cargo build --release --manifest-path "$SRC_DIR/collab-server/Cargo.toml"
     rm -f "$INSTALL_DIR/collab-server"
-    install -m 755 "$SRC_DIR/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
-    # Ensure PATH
+
+    local plat; plat=$(_platform)
+    if [ -n "$plat" ]; then
+        local url="https://github.com/$REPO/releases/latest/download/collab-server-${plat}"
+        if curl -fsSL --max-time 60 "$url" -o "$INSTALL_DIR/collab-server"; then
+            chmod +x "$INSTALL_DIR/collab-server"
+        else
+            _ensure_src
+            cargo build --release --manifest-path "$SRC_DIR/collab-server/Cargo.toml"
+            install -m 755 "$SRC_DIR/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
+        fi
+    else
+        _ensure_src
+        cargo build --release --manifest-path "$SRC_DIR/collab-server/Cargo.toml"
+        install -m 755 "$SRC_DIR/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
+    fi
+
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
             [ -f "$rc" ] && ! grep -q "$INSTALL_DIR" "$rc" && \
@@ -332,8 +352,13 @@ _do_server() {
 
 _do_plugin() {
     mkdir -p "$PLUGIN_DIR"
+    local url="https://github.com/$REPO/releases/latest/download/plugin.tar.gz"
+    if curl -fsSL --max-time 60 "$url" | tar -xz -C "$PLUGIN_DIR"; then
+        return 0
+    fi
+    # Fallback: build from source
+    _ensure_src
     cp -r "$SRC_DIR/openidea-collab/." "$PLUGIN_DIR/"
-    # COLLAB_DEV=1 is picked up by build.rs → cfg(collab_dev) → panel shows DEV badge
     COLLAB_DEV=1 openidea-plugin build "$PLUGIN_DIR"
 }
 
@@ -493,16 +518,15 @@ main() {
     if $IS_UPDATE; then
         STEP_TOTAL=6
         run_step  "$(t s_rust)"    _do_rust
-        run_step  "$(t s_clone)"   _do_clone
+        run_step  "$(t s_cli)"     _do_cli
         run_step  "$(t s_server)"  _do_server
         run_step  "$(t s_plugin)"  _do_plugin
         run_step  "$(t s_link)"    _do_link
         run_step  "$(t s_verify)"  _do_restart
     else
-        STEP_TOTAL=7
+        STEP_TOTAL=6
         run_step  "$(t s_rust)"    _do_rust
         run_step  "$(t s_cli)"     _do_cli
-        run_step  "$(t s_clone)"   _do_clone
         run_step  "$(t s_server)"  _do_server
         run_step  "$(t s_plugin)"  _do_plugin
         run_step  "$(t s_link)"    _do_link

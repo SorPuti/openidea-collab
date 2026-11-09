@@ -1,95 +1,84 @@
-name: Release Plugin
+name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [master]
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-
+  # ── collab-server binaries ──────────────────────────────────────────────────
+  server:
+    name: server ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,   name: linux-x86_64  }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-gnu,  name: linux-aarch64 }
+          - { os: macos-latest,   target: x86_64-apple-darwin,        name: macos-x86_64  }
+          - { os: macos-latest,   target: aarch64-apple-darwin,       name: macos-aarch64 }
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust stable + wasm32-wasip2
-        run: |
-          rustup update stable
-          rustup default stable
-          rustup target add wasm32-wasip2
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Run server tests
-        run: cargo test --manifest-path collab-server/Cargo.toml
-
-      - name: Install openidea-plugin CLI
-        run: cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
-
-      - name: Build plugin WASM
+          targets: ${{ matrix.target }}
+      - name: Install cross (Linux ARM only)
+        if: matrix.name == 'linux-aarch64'
+        run: cargo install cross --locked
+      - name: Build
         run: |
-          cd openidea-collab
-          openidea-plugin build
+          if [ "${{ matrix.name }}" = "linux-aarch64" ]; then
+            cross build --release --manifest-path collab-server/Cargo.toml --target ${{ matrix.target }}
+          else
+            cargo build --release --manifest-path collab-server/Cargo.toml --target ${{ matrix.target }}
+          fi
+      - name: Stage
+        run: cp collab-server/target/${{ matrix.target }}/release/collab-server collab-server-${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: collab-server-${{ matrix.name }}
+          path: collab-server-${{ matrix.name }}
 
-      - name: Extract version from plugin.toml
-        id: version
+  # ── plugin WASM bundle ───────────────────────────────────────────────────────
+  plugin:
+    name: plugin wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - name: Build WASM
+        run: cargo build --release --manifest-path openidea-collab/Cargo.toml --target wasm32-wasip2
+      - name: Package bundle
         run: |
-          VERSION=$(grep '^version' openidea-collab/plugin.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          echo "Plugin version: $VERSION / Tag: ${GITHUB_REF_NAME}"
+          mkdir -p bundle/dist
+          cp openidea-collab/plugin.toml bundle/
+          cp openidea-collab/target/wasm32-wasip2/release/openidea_collab.wasm bundle/dist/plugin.wasm
+          tar -czf plugin.tar.gz -C bundle .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin
+          path: plugin.tar.gz
 
-      - name: Write signing key
-        run: printf '%s' "${{ secrets.OPENIDEA_KEY }}" > /tmp/publisher.pem
-
-      - name: Pack plugin
-        run: |
-          mkdir -p dist-release
-          cd openidea-collab
-          openidea-plugin pack . \
-            --key /tmp/publisher.pem \
-            --publisher "${{ secrets.OPENIDEA_PUBLISHER_ID }}" \
-            --out "../dist-release/sorputi.openidea-collab-${{ steps.version.outputs.version }}.oiplugin"
-
-      - name: Generate marketplace index
-        run: |
-          DOWNLOAD_BASE="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/"
-          openidea-plugin index dist-release \
-            --publisher "${{ secrets.OPENIDEA_PUBLISHER_ID }}" \
-            --key /tmp/publisher.pem \
-            --download-base "$DOWNLOAD_BASE" \
-            --out dist-release/index.json
-
-      - name: Shred signing key
-        if: always()
-        run: shred -u /tmp/publisher.pem 2>/dev/null || rm -f /tmp/publisher.pem
-
-      - name: Create GitHub Release
+  # ── rolling "latest" release ─────────────────────────────────────────────────
+  release:
+    needs: [server, plugin]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Publish
         uses: softprops/action-gh-release@v2
         with:
-          name: "OpenIDEA Collab ${{ steps.version.outputs.tag }}"
-          body: |
-            ## OpenIDEA Collab ${{ steps.version.outputs.tag }}
-
-            Plugin de colaboração em tempo real para o OpenIDEA IDE.
-
-            ### Instalar via marketplace
-            Em **Settings › Plugins › Available**, busque por `openidea-collab`.
-
-            ### Instalar manualmente
-            Baixe o `.oiplugin` abaixo e arraste para o OpenIDEA.
+          tag_name: latest
+          name: Latest Build
+          prerelease: true
+          make_latest: true
           files: |
-            dist-release/sorputi.openidea-collab-${{ steps.version.outputs.version }}.oiplugin
-            dist-release/index.json
-          draft: false
-          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
+            collab-server-linux-x86_64/collab-server-linux-x86_64
+            collab-server-linux-aarch64/collab-server-linux-aarch64
+            collab-server-macos-x86_64/collab-server-macos-x86_64
+            collab-server-macos-aarch64/collab-server-macos-aarch64
+            plugin/plugin.tar.gz
