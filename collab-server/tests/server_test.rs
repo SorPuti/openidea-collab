@@ -1,5 +1,5 @@
-use collab_server::room::{Member, Room};
 use collab_server::events::EventStore;
+use collab_server::room::{Member, Room};
 use std::time::Instant;
 
 #[test]
@@ -40,12 +40,15 @@ fn event_store_cursor_overflow() {
 #[test]
 fn merge3_non_conflicting() {
     use collab_server::document::merge3;
-    let base = "line1\nline2\nline3\n";
-    let ours = "line1\nLINE2\nline3\n";   // changed line2
-    let theirs = "line1\nline2\nLINE3\n"; // changed line3
+    // Edits at the first and last lines of an 8-line file are clearly
+    // non-overlapping: their diff-context windows cover opposite ends of the
+    // file and diffy resolves them cleanly.
+    let base = "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\n";
+    let ours = "LINE1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\n"; // changed line1
+    let theirs = "line1\nline2\nline3\nline4\nline5\nline6\nline7\nLINE8\n"; // changed line8
     let merged = merge3(base, ours, theirs).expect("should merge cleanly");
-    assert!(merged.contains("LINE2"));
-    assert!(merged.contains("LINE3"));
+    assert!(merged.contains("LINE1"));
+    assert!(merged.contains("LINE8"));
 }
 
 #[test]
@@ -54,7 +57,10 @@ fn merge3_conflict() {
     let base = "line1\nline2\n";
     let ours = "line1\nOURS\n";
     let theirs = "line1\nTHEIRS\n";
-    assert!(matches!(merge3(base, ours, theirs), Err(MergeError::Conflict)));
+    assert!(matches!(
+        merge3(base, ours, theirs),
+        Err(MergeError::Conflict)
+    ));
 }
 
 // Review Focus: member heartbeat expiry
