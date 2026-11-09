@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OpenIDEA Collab — one-line installer
+# OpenIDEA Collab — one-line installer / updater
 # Usage: curl -fsSL https://raw.githubusercontent.com/SorPuti/openidea-collab/master/install.sh | bash
 set -euo pipefail
 
@@ -8,23 +8,23 @@ PLUGIN_ID="sorputi.openidea-collab"
 SERVER_PORT="${COLLAB_PORT:-4444}"
 INSTALL_DIR="${COLLAB_INSTALL_DIR:-$HOME/.local/bin}"
 DOWNLOADS_DIR="${DOWNLOADS_DIR:-$HOME/Downloads}"
+IS_UPDATE=false
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
 
-info()    { echo -e "${CYAN}[collab]${RESET} $*"; }
-ok()      { echo -e "${GREEN}[✓]${RESET} $*"; }
-warn()    { echo -e "${YELLOW}[!]${RESET} $*"; }
-die()     { echo -e "${RED}[✗]${RESET} $*" >&2; exit 1; }
-header()  { echo -e "\n${BOLD}$*${RESET}"; }
+info()   { echo -e "${CYAN}[collab]${RESET} $*"; }
+ok()     { echo -e "${GREEN}[✓]${RESET} $*"; }
+warn()   { echo -e "${YELLOW}[!]${RESET} $*"; }
+die()    { echo -e "${RED}[✗]${RESET} $*" >&2; exit 1; }
+header() { echo -e "\n${BOLD}$*${RESET}"; }
 
 # ── OS detection ─────────────────────────────────────────────────────────────
 detect_os() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS_ID="${ID:-unknown}"
-        OS_LIKE="${ID_LIKE:-}"
     elif [ "$(uname)" = "Darwin" ]; then
         OS_ID="macos"
     else
@@ -35,15 +35,32 @@ detect_os() {
 # ── Package manager ───────────────────────────────────────────────────────────
 install_pkg() {
     case "$OS_ID" in
-        fedora|rhel|centos)         sudo dnf install -y "$@" ;;
-        ubuntu|debian|pop|linuxmint|elementary)
-                                    sudo apt-get install -y "$@" ;;
-        arch|manjaro|endeavouros)   sudo pacman -S --noconfirm "$@" ;;
-        opensuse*|sles)             sudo zypper install -y "$@" ;;
-        macos)                      brew install "$@" ;;
-        *)  warn "Unknown OS — trying apt-get, then dnf"
-            sudo apt-get install -y "$@" 2>/dev/null || sudo dnf install -y "$@" ;;
+        fedora|rhel|centos)                     sudo dnf install -y "$@" ;;
+        ubuntu|debian|pop|linuxmint|elementary) sudo apt-get install -y "$@" ;;
+        arch|manjaro|endeavouros)               sudo pacman -S --noconfirm "$@" ;;
+        opensuse*|sles)                         sudo zypper install -y "$@" ;;
+        macos)                                  brew install "$@" ;;
+        *) sudo apt-get install -y "$@" 2>/dev/null || sudo dnf install -y "$@" ;;
     esac
+}
+
+# ── Detect if already installed ───────────────────────────────────────────────
+check_existing() {
+    if [ -f "$INSTALL_DIR/collab-server" ]; then
+        IS_UPDATE=true
+        echo -e "${BOLD}"
+        echo "  ╔════════════════════════════════╗"
+        echo "  ║   OpenIDEA Collab Updater      ║"
+        echo "  ╚════════════════════════════════╝"
+        echo -e "${RESET}"
+        info "Existing installation found — updating collab-server and plugin"
+    else
+        echo -e "${BOLD}"
+        echo "  ╔════════════════════════════════╗"
+        echo "  ║   OpenIDEA Collab Installer    ║"
+        echo "  ╚════════════════════════════════╝"
+        echo -e "${RESET}"
+    fi
 }
 
 # ── Rust ──────────────────────────────────────────────────────────────────────
@@ -62,77 +79,85 @@ ensure_rust() {
 
 # ── System dependencies ───────────────────────────────────────────────────────
 install_deps() {
+    # Skip on update — deps don't change
+    if $IS_UPDATE; then return; fi
+
     header "▸ System dependencies"
     detect_os
     info "Detected OS: $OS_ID"
 
     case "$OS_ID" in
         fedora|rhel|centos)
-            info "Installing build tools..."
-            install_pkg gcc curl git openssl-devel pkg-config
-            ;;
+            install_pkg gcc curl git openssl-devel pkg-config ;;
         ubuntu|debian|pop|linuxmint|elementary)
-            info "Updating package lists..."
             sudo apt-get update -qq
-            info "Installing build tools..."
-            install_pkg build-essential curl git libssl-dev pkg-config
-            ;;
+            install_pkg build-essential curl git libssl-dev pkg-config ;;
         arch|manjaro|endeavouros)
-            install_pkg base-devel curl git openssl pkg-config
-            ;;
+            install_pkg base-devel curl git openssl pkg-config ;;
         macos)
             if ! command -v brew &>/dev/null; then
-                info "Installing Homebrew..."
                 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             fi
-            install_pkg curl git openssl pkg-config
-            ;;
+            install_pkg curl git openssl pkg-config ;;
         *)
-            warn "Unsupported OS — skipping system deps. Install gcc, curl, git, openssl, pkg-config manually."
-            ;;
+            warn "Unsupported OS — ensure gcc, curl, git, openssl, pkg-config are installed" ;;
     esac
     ok "System dependencies ready"
 }
 
-# ── collab-server binary ───────────────────────────────────────────────────────
+# ── collab-server ─────────────────────────────────────────────────────────────
 install_server() {
     header "▸ collab-server"
     mkdir -p "$INSTALL_DIR"
 
-    # Try downloading a pre-built binary from latest release first
+    # Try a pre-built binary first
     LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-        | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/')
+        | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/' || true)
 
-    if [ -z "$LATEST_TAG" ]; then
-        warn "Could not fetch latest release tag — building from source"
-        build_server_from_source
-        return
+    if [ -n "$LATEST_TAG" ]; then
+        BINARY_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/collab-server-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+        if curl -fsSL --head "$BINARY_URL" 2>/dev/null | grep -q "200\|302"; then
+            info "Downloading collab-server $LATEST_TAG..."
+            curl -fsSL "$BINARY_URL" -o "$INSTALL_DIR/collab-server"
+            chmod +x "$INSTALL_DIR/collab-server"
+            ok "collab-server $LATEST_TAG installed → $INSTALL_DIR/collab-server"
+            return
+        fi
     fi
 
-    BINARY_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/collab-server-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
-
-    if curl -fsSL --head "$BINARY_URL" | grep -q "200\|302"; then
-        info "Downloading collab-server $LATEST_TAG..."
-        curl -fsSL "$BINARY_URL" -o "$INSTALL_DIR/collab-server"
-        chmod +x "$INSTALL_DIR/collab-server"
-        ok "collab-server installed → $INSTALL_DIR/collab-server"
-    else
-        warn "No pre-built binary for this platform — building from source (may take ~2 min)"
-        build_server_from_source
-    fi
+    warn "No pre-built binary — building from source (may take ~2 min)"
+    build_server_from_source
 }
 
 build_server_from_source() {
     TMP_DIR=$(mktemp -d)
+    # Clean up clone dir on exit, but keep the binary we installed
     trap 'rm -rf "$TMP_DIR"' EXIT
     info "Cloning repository..."
-    git clone --depth 1 "https://github.com/$REPO.git" "$TMP_DIR/openidea-collab"
+    git clone --depth 1 "https://github.com/$REPO.git" "$TMP_DIR/src"
     info "Building collab-server..."
-    cargo build --release --manifest-path "$TMP_DIR/openidea-collab/collab-server/Cargo.toml"
-    mkdir -p "$INSTALL_DIR"
-    cp "$TMP_DIR/openidea-collab/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
+    cargo build --release --manifest-path "$TMP_DIR/src/collab-server/Cargo.toml"
+    cp "$TMP_DIR/src/collab-server/target/release/collab-server" "$INSTALL_DIR/collab-server"
     chmod +x "$INSTALL_DIR/collab-server"
     ok "collab-server built and installed → $INSTALL_DIR/collab-server"
+}
+
+# ── Restart service if already running ───────────────────────────────────────
+restart_service() {
+    case "$OS_ID" in
+        macos)
+            PLIST="$HOME/Library/LaunchAgents/com.sorputi.collab-server.plist"
+            if [ -f "$PLIST" ]; then
+                launchctl unload "$PLIST" 2>/dev/null || true
+                launchctl load "$PLIST"
+                ok "collab-server restarted (launchd)"
+            fi ;;
+        *)
+            if systemctl --user is-active --quiet collab-server.service 2>/dev/null; then
+                systemctl --user restart collab-server.service
+                ok "collab-server restarted (systemd)"
+            fi ;;
+    esac
 }
 
 # ── systemd service (Linux) ───────────────────────────────────────────────────
@@ -184,33 +209,40 @@ setup_service_macos() {
 </dict>
 </plist>
 EOF
+    launchctl unload "$PLIST" 2>/dev/null || true
     launchctl load "$PLIST"
     ok "launchd service loaded (port $SERVER_PORT)"
 }
 
 # ── Plugin .oiplugin download ─────────────────────────────────────────────────
 download_plugin() {
-    header "▸ Plugin download"
+    header "▸ Plugin"
     LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-        | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/')
+        | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/' || true)
 
     if [ -z "$LATEST_TAG" ]; then
-        warn "Could not determine latest release tag — skipping plugin download"
-        return
+        warn "Could not fetch release tag — get plugin from https://github.com/$REPO/releases"
+        PLUGIN_PATH=""; return
     fi
 
     VERSION="${LATEST_TAG#v}"
     PLUGIN_FILE="${PLUGIN_ID}-${VERSION}.oiplugin"
     PLUGIN_URL="https://github.com/$REPO/releases/download/$LATEST_TAG/$PLUGIN_FILE"
+    DEST="$DOWNLOADS_DIR/$PLUGIN_FILE"
+
+    # Skip if same version already downloaded
+    if [ -f "$DEST" ]; then
+        ok "Plugin $VERSION already in $DOWNLOADS_DIR — skipping download"
+        PLUGIN_PATH="$DEST"; return
+    fi
 
     mkdir -p "$DOWNLOADS_DIR"
     info "Downloading $PLUGIN_FILE..."
-    if curl -fsSL "$PLUGIN_URL" -o "$DOWNLOADS_DIR/$PLUGIN_FILE"; then
-        ok "Plugin downloaded → $DOWNLOADS_DIR/$PLUGIN_FILE"
-        PLUGIN_PATH="$DOWNLOADS_DIR/$PLUGIN_FILE"
+    if curl -fsSL "$PLUGIN_URL" -o "$DEST"; then
+        ok "Plugin downloaded → $DEST"
+        PLUGIN_PATH="$DEST"
     else
-        warn "Could not download plugin (release may not exist yet)"
-        warn "Get it manually from: https://github.com/$REPO/releases"
+        warn "Plugin not in releases yet — get it from https://github.com/$REPO/releases"
         PLUGIN_PATH=""
     fi
 }
@@ -218,87 +250,96 @@ download_plugin() {
 # ── PATH setup ────────────────────────────────────────────────────────────────
 ensure_path() {
     if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
-        warn "$INSTALL_DIR is not in PATH"
         for rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
-            [ -f "$rc" ] && echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$rc" && ok "Added to $rc"
+            if [ -f "$rc" ] && ! grep -q "$INSTALL_DIR" "$rc"; then
+                echo "export PATH=\"$INSTALL_DIR:\$PATH\"" >> "$rc"
+                ok "Added $INSTALL_DIR to PATH in $rc"
+            fi
         done
         export PATH="$INSTALL_DIR:$PATH"
     fi
 }
 
-# ── Verify ────────────────────────────────────────────────────────────────────
+# ── Verify server is up ───────────────────────────────────────────────────────
 verify() {
     header "▸ Verify"
-    if "$INSTALL_DIR/collab-server" --version &>/dev/null; then
-        ok "collab-server $("$INSTALL_DIR/collab-server" --version 2>&1 | head -1)"
-    else
-        warn "collab-server installed but --version not supported (run it to verify)"
-    fi
-    sleep 1
-    if curl -sf "http://localhost:$SERVER_PORT/rooms" &>/dev/null; then
-        ok "Server is responding on port $SERVER_PORT"
-    else
-        warn "Server not responding yet on port $SERVER_PORT (may still be starting)"
-    fi
+    local retries=8 i=0
+    while [ $i -lt $retries ]; do
+        if curl -sf "http://localhost:$SERVER_PORT/rooms" -o /dev/null; then
+            ok "collab-server is running on port $SERVER_PORT"
+            return
+        fi
+        sleep 1; i=$((i+1))
+    done
+    warn "Server not responding on port $SERVER_PORT after ${retries}s"
+    warn "Check logs: journalctl --user -u collab-server -f"
 }
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 print_summary() {
+    local action
+    $IS_UPDATE && action="updated" || action="installed"
     echo
     echo -e "${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
-    echo -e "${BOLD}║        OpenIDEA Collab — setup complete!         ║${RESET}"
+    echo -e "${BOLD}║      OpenIDEA Collab — ${action}! $(printf '%-16s' '')║${RESET}"
     echo -e "${BOLD}╚══════════════════════════════════════════════════╝${RESET}"
     echo
     echo -e "  ${GREEN}collab-server${RESET}  →  $INSTALL_DIR/collab-server"
     echo -e "  ${GREEN}Port${RESET}           →  $SERVER_PORT"
-    if [ -n "${PLUGIN_PATH:-}" ]; then
-    echo -e "  ${GREEN}Plugin file${RESET}    →  $PLUGIN_PATH"
-    fi
+    [ -n "${PLUGIN_PATH:-}" ] && echo -e "  ${GREEN}Plugin${RESET}         →  $PLUGIN_PATH"
     echo
     echo -e "${BOLD}Next steps:${RESET}"
-    echo -e "  1. The collab-server is running (auto-starts on login)."
-    echo -e "     Logs: journalctl --user -u collab-server -f"
-    echo
-    if [ -n "${PLUGIN_PATH:-}" ]; then
-    echo -e "  2. Install the plugin in OpenIDEA:"
-    echo -e "     • Drag ${CYAN}$PLUGIN_PATH${RESET} onto the OpenIDEA window, or"
-    echo -e "     • Settings → Plugins → Install from file… → select the .oiplugin"
-    echo
-    echo -e "  3. Run ${CYAN}Collab: Create Room${RESET} in OpenIDEA to start collaborating."
+    if $IS_UPDATE; then
+        echo -e "  ✓ Server updated and restarted automatically."
+        echo
     else
-    echo -e "  2. Install the plugin: download the .oiplugin from"
-    echo -e "     ${CYAN}https://github.com/$REPO/releases${RESET}"
-    echo -e "     and drag it onto the OpenIDEA window."
-    echo
-    echo -e "  3. Run ${CYAN}Collab: Create Room${RESET} in OpenIDEA to start collaborating."
+        echo -e "  1. Server is running (auto-starts on login)."
+        echo -e "     Logs: journalctl --user -u collab-server -f"
+        echo
+    fi
+    if [ -n "${PLUGIN_PATH:-}" ]; then
+        echo -e "  ${$IS_UPDATE && echo '2' || echo '2'}. Install plugin in OpenIDEA:"
+        echo -e "     • Drag ${CYAN}$PLUGIN_PATH${RESET} onto the OpenIDEA window, or"
+        echo -e "     • Settings → Plugins → Install from file…"
+        echo
+        echo -e "  3. Run ${CYAN}Collab: Create Room${RESET} to start collaborating."
+    else
+        echo -e "  2. Install plugin: https://github.com/$REPO/releases"
+        echo
+        echo -e "  3. Run ${CYAN}Collab: Create Room${RESET} to start collaborating."
     fi
     echo
-    echo -e "  ${YELLOW}Cross-network${RESET}: expose the server with  ${CYAN}ngrok http $SERVER_PORT${RESET}"
-    echo -e "  then run ${CYAN}Collab: Set Server URL${RESET} and paste the HTTPS URL."
+    echo -e "  ${YELLOW}Cross-network${RESET}: ${CYAN}ngrok http $SERVER_PORT${RESET} → ${CYAN}Collab: Set Server URL${RESET}"
     echo
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
-    echo -e "${BOLD}"
-    echo "  ╔════════════════════════════════╗"
-    echo "  ║   OpenIDEA Collab Installer    ║"
-    echo "  ╚════════════════════════════════╝"
-    echo -e "${RESET}"
-
     detect_os
-    install_deps
-    ensure_rust
-    install_server
-    ensure_path
+    check_existing  # sets IS_UPDATE and prints header
 
-    case "$OS_ID" in
-        macos) setup_service_macos ;;
-        *)     setup_service_linux ;;
-    esac
+    if $IS_UPDATE; then
+        # Update path: rebuild server + restart, then refresh plugin
+        ensure_rust
+        install_server
+        ensure_path
+        restart_service
+        download_plugin
+        verify
+    else
+        # Fresh install
+        install_deps
+        ensure_rust
+        install_server
+        ensure_path
+        case "$OS_ID" in
+            macos) setup_service_macos ;;
+            *)     setup_service_linux ;;
+        esac
+        download_plugin
+        verify
+    fi
 
-    download_plugin
-    verify
     print_summary
 }
 
