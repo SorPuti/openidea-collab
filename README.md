@@ -1,6 +1,6 @@
 # OpenIDEA Collab
 
-Real-time collaborative editing for [OpenIDEA](https://openidea.dev) — sync files between developers (and AI agents) over HTTP long-poll without WebSockets.
+Real-time collaborative editing for [OpenIDEA](https://github.com/l0ng-ai/openidea) — sync files between developers (and AI agents) over HTTP long-poll without WebSockets.
 
 ## Features
 
