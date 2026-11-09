@@ -103,21 +103,22 @@ impl SyncState {
             Err(_) => return,
         };
         let mut presence_changed = false;
-        for event in &result.events {
-            let event_type = event["type"].as_str().unwrap_or("");
+        for envelope in &result.events {
+            let inner = &envelope["event"];
+            let event_type = inner["type"].as_str().unwrap_or("");
             match event_type {
                 "file_updated" => {
-                    self.apply_file_updated(client, ctx, event, &room);
+                    self.apply_file_updated(client, ctx, inner, &room);
                 }
                 "member_joined" => {
                     if let (Some(uid), Some(name)) = (
-                        event["payload"]["user_id"].as_str(),
-                        event["payload"]["name"].as_str(),
+                        inner["user_id"].as_str(),
+                        inner["name"].as_str(),
                     ) {
                         self.presence.update_peer(
                             uid.to_owned(),
                             name.to_owned(),
-                            event["payload"]["current_file"]
+                            inner["current_file"]
                                 .as_str()
                                 .map(str::to_owned),
                         );
@@ -125,20 +126,20 @@ impl SyncState {
                     }
                 }
                 "member_left" => {
-                    if let Some(uid) = event["payload"]["user_id"].as_str() {
+                    if let Some(uid) = inner["user_id"].as_str() {
                         self.presence.remove_peer(uid);
                         presence_changed = true;
                     }
                 }
                 "presence_changed" => {
                     if let (Some(uid), Some(name)) = (
-                        event["payload"]["user_id"].as_str(),
-                        event["payload"]["name"].as_str(),
+                        inner["user_id"].as_str(),
+                        inner["name"].as_str(),
                     ) {
                         self.presence.update_peer(
                             uid.to_owned(),
                             name.to_owned(),
-                            event["payload"]["current_file"]
+                            inner["current_file"]
                                 .as_str()
                                 .map(str::to_owned),
                         );
@@ -146,10 +147,10 @@ impl SyncState {
                     }
                 }
                 "conflict_warn" => {
-                    let file = event["payload"]["path"]
+                    let file = inner["path"]
                         .as_str()
                         .unwrap_or("(unknown)");
-                    let user = event["payload"]["user_id"]
+                    let user = inner["user_id"]
                         .as_str()
                         .unwrap_or("another user");
                     host::notify(
@@ -174,11 +175,11 @@ impl SyncState {
         event: &serde_json::Value,
         room: &RoomState,
     ) {
-        let path = match event["payload"]["path"].as_str() {
+        let path = match event["path"].as_str() {
             Some(p) => p,
             None => return,
         };
-        let remote_version = event["payload"]["version"].as_u64().unwrap_or(0);
+        let remote_version = event["version"].as_u64().unwrap_or(0);
         let local_version = self.file_versions.get(path).copied().unwrap_or(0);
         if remote_version <= local_version {
             return;
