@@ -2,7 +2,7 @@
 
 Real-time collaborative editing for [OpenIDEA](https://github.com/l0ng-ai/openidea) — sync files between developers (and AI agents) over HTTP long-poll without WebSockets.
 
-> **Demo** — open [`screenshots/demo.html`](screenshots/demo.html) locally to preview the UI (cursor decorations, GitHub avatars, presence panel).
+![OpenIDEA Collab v0.2 — cursor decorations, GitHub avatars and presence panel](screenshots/demo.svg)
 
 ## Features
 
@@ -102,11 +102,27 @@ All endpoints return JSON. The `events` endpoint holds the connection open until
 
 ## Install
 
+### One-line installer (Linux · macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SorPuti/openidea-collab/master/install.sh | bash
+```
+
+The script:
+- Detects your OS (Fedora, Ubuntu/Debian, Arch, macOS)
+- Installs Rust via `rustup` if needed
+- Builds and installs `collab-server` to `~/.local/bin/`
+- Registers a **systemd user service** (Linux) or **launchd agent** (macOS) so the server starts automatically on login
+- Downloads the latest `.oiplugin` to `~/Downloads/`
+- Prints next steps
+
+> Override defaults with env vars: `COLLAB_PORT=5000 INSTALL_DIR=/usr/local/bin curl … | bash`
+
 ### From marketplace (once PR is merged)
 
 In **OpenIDEA → Settings → Plugins → Available**, search for `openidea-collab`.
 
-### Manual install (no marketplace required)
+### Manual plugin install (no marketplace required)
 
 1. Go to the [latest release](https://github.com/SorPuti/openidea-collab/releases/latest).
 2. Download `sorputi.openidea-collab-X.Y.Z.oiplugin`.
