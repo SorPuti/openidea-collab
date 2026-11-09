@@ -2,6 +2,8 @@
 
 Real-time collaborative editing for [OpenIDEA](https://github.com/l0ng-ai/openidea) — sync files between developers (and AI agents) over HTTP long-poll without WebSockets.
 
+> **Demo** — open [`screenshots/demo.html`](screenshots/demo.html) locally to preview the UI (cursor decorations, GitHub avatars, presence panel).
+
 ## Features
 
 - **Room-based sessions** — create or join a room with a simple ID
