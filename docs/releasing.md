@@ -2,7 +2,7 @@
 
 ## Current gate
 
-Do not publish a new marketplace candidate until the requirements in [security.md](security.md) and the [manual IDE exercise](validation.md) are complete. Historical `v0.1.0` must remain unchanged. The `latest` rolling workflow has been removed; pushing to `master` now runs CI only.
+Do not publish a new marketplace candidate until the requirements in [security.md](security.md) and the [manual IDE exercise](validation.md) are complete. Historical `v0.1.0` must remain unchanged. The `latest` rolling workflow has been removed; pushing to `main` now runs CI only.
 
 The tag workflow always validates source and tests. Signing and draft creation are disabled unless the repository variable `COLLAB_RELEASE_READY` is `true`. Configure the `release` GitHub environment with required reviewers and the `OPENIDEA_KEY` secret before enabling it. Only enable the variable after the outstanding review requirements are resolved. Do not paste private keys into issues, logs or documentation.
 

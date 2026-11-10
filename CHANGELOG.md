@@ -11,4 +11,4 @@
 
 ## Historical v0.1.0
 
-Submitted to the marketplace but not approved. The source tag lacks a license file and its plugin ID differs from the published package. Preserve this tag for audit; do not treat it as a verified release. The source version `0.2.0` on master does not by itself establish a reviewed release.
+Submitted to the marketplace but not approved. The source tag lacks a license file and its plugin ID differs from the published package. Preserve this tag for audit; do not treat it as a verified release. The source version `0.2.0` on main does not by itself establish a reviewed release.

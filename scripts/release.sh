@@ -1,55 +1,46 @@
 #!/usr/bin/env bash
+# Prepare artifacts only. Publishing and marketplace updates are separate steps.
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$SCRIPT_DIR/.."
-PLUGIN_DIR="$ROOT/openidea-collab"
-DIST_DIR="$ROOT/dist-release"
-
-# --- args ---
-KEY_FILE="${OPENIDEA_KEY_FILE:-}"
-PUBLISHER="${OPENIDEA_PUBLISHER:-}"
-DOWNLOAD_BASE="${OPENIDEA_DOWNLOAD_BASE:-}"
-
-usage() {
-  echo "Usage: OPENIDEA_KEY_FILE=<path> OPENIDEA_PUBLISHER=<id> OPENIDEA_DOWNLOAD_BASE=<url> $0"
-  echo ""
-  echo "  OPENIDEA_KEY_FILE      path to your .pem signing key (from: openidea-plugin keygen)"
-  echo "  OPENIDEA_PUBLISHER     your publisher ID (e.g. SorPuti)"
-  echo "  OPENIDEA_DOWNLOAD_BASE base URL where .oiplugin will be hosted"
-  echo "                         e.g. https://github.com/SorPuti/openidea-collab/releases/download/v0.1.0/"
-  exit 1
-}
-
-[[ -z "$KEY_FILE" || -z "$PUBLISHER" || -z "$DOWNLOAD_BASE" ]] && usage
-
-VERSION=$(grep '^version' "$PLUGIN_DIR/plugin.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
-PACKAGE_FILE="ai.l0ng.openidea-collab-${VERSION}.oiplugin"
-
-echo "▶ Versão: $VERSION"
-echo "▶ Publisher: $PUBLISHER"
-
-# build WASM
-echo "▶ Buildando plugin WASM..."
-cd "$PLUGIN_DIR"
-openidea-plugin build
-
-# pack
-echo "▶ Empacotando..."
-mkdir -p "$DIST_DIR"
-openidea-plugin pack "$PLUGIN_DIR" --key "$KEY_FILE" --publisher "$PUBLISHER" --out "$DIST_DIR/$PACKAGE_FILE"
-
-# generate index
-echo "▶ Gerando index.json..."
-openidea-plugin index "$DIST_DIR" \
-  --publisher "$PUBLISHER" \
-  --key "$KEY_FILE" \
-  --download-base "$DOWNLOAD_BASE" \
-  --out "$DIST_DIR/index.json"
-
-echo ""
-echo "✓ Pronto! Arquivos em $DIST_DIR:"
-ls -lh "$DIST_DIR"
-echo ""
-echo "Próximo passo: fazer upload de '$PACKAGE_FILE' e 'index.json' para:"
-echo "  $DOWNLOAD_BASE"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+: "${OPENIDEA_KEY_FILE:?Set the signing key file path}"
+: "${OPENIDEA_PUBLISHER:?Set the publisher ID (sorputi)}"
+: "${OPENIDEA_DOWNLOAD_BASE:?Set the versioned release download URL}"
+: "${RELEASE_TAG:?Set the exact source tag, for example v0.2.1}"
+[[ "$OPENIDEA_PUBLISHER" == sorputi ]] || { echo "Publisher must be sorputi" >&2; exit 1; }
+python3 scripts/verify-release.py --tag "$RELEASE_TAG"
+# An absolute key path continues to work after changing the working directory.
+KEY_FILE="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$OPENIDEA_KEY_FILE")"
+VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("openidea-collab/plugin.toml", "rb"))["version"])')"
+PACKAGE_FILE="sorputi.openidea-collab-${VERSION}.oiplugin"
+DIST_DIR="$ROOT/dist-release/$RELEASE_TAG"
+[[ ! -e "$DIST_DIR" ]] || { echo "Output exists: $DIST_DIR; use a fresh checkout" >&2; exit 1; }
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+# Build tracked source from the verified tag, excluding local ignored files.
+git archive "$RELEASE_TAG" | tar -x -C "$STAGE"
+cd "$STAGE"
+cargo build --locked --release --manifest-path openidea-collab/Cargo.toml --target wasm32-wasip2
+mkdir -p openidea-collab/dist "$DIST_DIR"
+cp openidea-collab/target/wasm32-wasip2/release/openidea_collab.wasm openidea-collab/dist/plugin.wasm
+openidea-plugin check openidea-collab
+openidea-plugin pack openidea-collab --key "$KEY_FILE" --publisher "$OPENIDEA_PUBLISHER" --out "$DIST_DIR/$PACKAGE_FILE"
+openidea-plugin check "$DIST_DIR/$PACKAGE_FILE"
+openidea-plugin index "$DIST_DIR" --publisher "$OPENIDEA_PUBLISHER" --key "$KEY_FILE" \
+  --download-base "$OPENIDEA_DOWNLOAD_BASE" --out "$DIST_DIR/index.json"
+# Preserve the development installer bundle format, with license and README.
+tar -czf "$DIST_DIR/plugin.tar.gz" -C openidea-collab plugin.toml README.md LICENSE NOTICE dist
+cd "$DIST_DIR"
+python3 - "$ROOT" "$RELEASE_TAG" <<'PY'
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import sys
+root, tag = sys.argv[1:]
+commit = subprocess.check_output(["git", "-C", root, "rev-parse", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
+Path("source.json").write_text(json.dumps({"tag": tag, "commit": commit, "sdk_tag": "v0.1.40", "rust": "1.93.0"}, indent=2) + "\n")
+files = sorted(p for p in Path('.').iterdir() if p.is_file())
+Path("SHA256SUMS").write_text(''.join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n" for p in files))
+PY
+printf 'Prepared artifacts in %s\nNo release was published.\n' "$DIST_DIR"
