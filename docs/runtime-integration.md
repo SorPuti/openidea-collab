@@ -74,3 +74,15 @@ operations, but the released API does not provide a continuous subscription for
 all documents/windows. The first reliable editor integration therefore requires
 the host document subscription API requested in issue #2532. Until then, do not
 claim end-to-end collaboration and do not enable remote writes.
+
+### Companion packaging status
+
+Build the native binary for the current or configured Rust target with
+`./src/tooling/build-companion.sh <target-triple>`. The script emits a target
+specific binary and SHA256 manifest under `target/companion/`. Example target:
+`x86_64-unknown-linux-gnu`. Cross builds require the Rust target and platform
+linker; macOS/Windows artifacts must be built and tested on supported runners.
+These hashes are integrity records, not signatures. Release signing and a
+trusted update/install path are still required before distribution. Do not add
+the process capability to the production manifest until the signed executable
+can be installed and the marketplace accepts the external binary model.

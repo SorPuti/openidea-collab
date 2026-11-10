@@ -104,6 +104,9 @@ async fn emit<W: AsyncWriteExt + Unpin, T: Serialize>(out: &mut W, msg: &T) -> i
     out.flush().await
 }
 fn decode_hex(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 {
+        return None;
+    }
     s.as_bytes()
         .chunks_exact(2)
         .map(|p| Some((digit(p[0])? << 4) | digit(p[1])?))
@@ -125,4 +128,22 @@ fn encode_hex(b: &[u8]) -> String {
         s.push(H[(x & 15) as usize] as char)
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn hex_codec_round_trips_and_rejects_bad_input() {
+        let source = [0, 1, 15, 16, 127, 128, 255];
+        let encoded = encode_hex(&source);
+        assert_eq!(decode_hex(&encoded).as_deref(), Some(source.as_slice()));
+        assert!(decode_hex("0").is_none());
+        assert!(decode_hex("gg").is_none());
+    }
+    #[test]
+    fn command_schema_rejects_unknown_fields_and_wrong_relay() {
+        assert!(serde_json::from_str::<Input>(r#"{"op":"connect","websocket_url":"https://evil.example","credential":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","other":1}"#).is_err());
+        assert!(serde_json::from_str::<Input>(r#"{"op":"connect","websocket_url":"https://collab.synthosia.com/v1/socket","credential":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}"#).is_ok());
+    }
 }
