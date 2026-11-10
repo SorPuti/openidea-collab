@@ -6,6 +6,8 @@ permissions:
   contents: read
 jobs:
   validate:
+    if: github.event.repository.private == false
+    timeout-minutes: 30
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +22,7 @@ jobs:
 
   server:
     needs: validate
-    if: vars.COLLAB_RELEASE_READY == 'true'
+    if: github.event.repository.private == false && vars.COLLAB_RELEASE_READY == 'true'
     name: server ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -56,7 +58,7 @@ jobs:
   # Enable only after the security/reliability review and manual IDE validation.
   package:
     needs: [validate, server]
-    if: vars.COLLAB_RELEASE_READY == 'true'
+    if: github.event.repository.private == false && vars.COLLAB_RELEASE_READY == 'true'
     environment: release
     runs-on: ubuntu-24.04
     permissions:

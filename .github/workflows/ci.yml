@@ -5,9 +5,18 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
+    # Standard hosted compute is free for public repositories; never select a larger runner here.
+    if: github.event.repository.private == false
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_BUILD_JOBS: 1
+      CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v4
       - name: Install pinned Rust toolchain
