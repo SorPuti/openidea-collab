@@ -24,15 +24,22 @@ impl PeerPresence {
     }
 
     fn avatar_color(&self) -> &'static str {
-        let colors = ["#E57373","#F06292","#BA68C8","#64B5F6","#4DB6AC","#81C784","#FFD54F","#FF8A65"];
-        let idx = self.user_id.bytes().fold(0usize, |a, b| a.wrapping_add(b as usize)) % colors.len();
+        let colors = [
+            "#E57373", "#F06292", "#BA68C8", "#64B5F6", "#4DB6AC", "#81C784", "#FFD54F", "#FF8A65",
+        ];
+        let idx = self
+            .user_id
+            .bytes()
+            .fold(0usize, |a, b| a.wrapping_add(b as usize))
+            % colors.len();
         colors[idx]
     }
 
     pub fn to_json(&self) -> serde_json::Value {
-        let file_display = self.current_file.as_deref().map(|f| {
-            f.rsplit('/').next().unwrap_or(f).to_owned()
-        });
+        let file_display = self
+            .current_file
+            .as_deref()
+            .map(|f| f.rsplit('/').next().unwrap_or(f).to_owned());
         serde_json::json!({
             "user_id": self.user_id,
             "name": self.name,
@@ -56,7 +63,12 @@ pub struct PresenceState {
 
 impl PresenceState {
     pub fn new(self_id: String, self_name: String) -> Self {
-        Self { self_id, self_name, self_github: None, peers: HashMap::new() }
+        Self {
+            self_id,
+            self_name,
+            self_github: None,
+            peers: HashMap::new(),
+        }
     }
 
     /// Insert or update a peer's snapshot.
@@ -69,14 +81,17 @@ impl PresenceState {
         line: Option<u32>,
         col: Option<u32>,
     ) {
-        let entry = self.peers.entry(uid.clone()).or_insert_with(|| PeerPresence {
-            user_id: uid,
-            name: name.clone(),
-            current_file: None,
-            github: None,
-            line: None,
-            col: None,
-        });
+        let entry = self
+            .peers
+            .entry(uid.clone())
+            .or_insert_with(|| PeerPresence {
+                user_id: uid,
+                name: name.clone(),
+                current_file: None,
+                github: None,
+                line: None,
+                col: None,
+            });
         entry.name = name;
         entry.current_file = file;
         if github.is_some() {

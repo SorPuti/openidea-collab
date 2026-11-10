@@ -376,7 +376,13 @@ async fn post_presence(
     if !room.members.contains_key(&uid) {
         return Err(StatusCode::NOT_FOUND);
     }
-    room.update_presence(&uid, body.current_file.clone(), body.github.clone(), body.line, body.col);
+    room.update_presence(
+        &uid,
+        body.current_file.clone(),
+        body.github.clone(),
+        body.line,
+        body.col,
+    );
     room.events.push(RoomEvent::PresenceChanged {
         user_id: uid,
         file: body.current_file,
