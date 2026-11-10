@@ -1,11 +1,11 @@
 //! Experimental local project snapshots. Not wired to network or UI.
 //! The source directory must not be concurrently modified by untrusted users.
-use flate2::{write::GzEncoder, Compression};
+use flate2::{read::MultiGzDecoder, write::GzEncoder, Compression};
 use ignore::{DirEntry, WalkBuilder};
 use std::{
     fs::{self, OpenOptions},
-    io,
-    path::Path,
+    io::{self, Read},
+    path::{Component, Path},
 };
 
 #[derive(Clone, Copy)]
@@ -186,6 +186,101 @@ pub fn create_snapshot(project: &Path, output: &Path, limits: Limits) -> io::Res
     })();
     if result.is_err() {
         let _ = fs::remove_file(output);
+    }
+    result
+}
+
+/// Restore only into a newly created private staging directory. Never applies
+/// files to an existing project. The destination parent must be trusted.
+pub fn restore_snapshot(archive: &Path, destination: &Path, limits: Limits) -> io::Result<Report> {
+    use std::collections::HashSet;
+    let mut dir = fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        dir.mode(0o700);
+    }
+    dir.create(destination)?;
+    let result = (|| {
+        let file = fs::File::open(archive)?;
+        let overhead = (limits.max_files as u64)
+            .saturating_mul(4096)
+            .saturating_add(1024 * 1024);
+        let cap = limits.max_total_bytes.saturating_add(overhead);
+        let decoder = MultiGzDecoder::new(file).take(cap);
+        let mut tar = tar::Archive::new(decoder);
+        let mut report = Report::default();
+        let mut seen = HashSet::new();
+        for entry in tar.entries()? {
+            let mut entry = entry?;
+            if !entry.header().entry_type().is_file() {
+                return Err(io::Error::other("only regular files are allowed"));
+            }
+            let path = entry.path()?.into_owned();
+            let text = path
+                .to_str()
+                .ok_or_else(|| io::Error::other("invalid path"))?;
+            if text.is_empty()
+                || text.len() > 4096
+                || text.contains('\\')
+                || path.components().count() > 128
+                || !path.components().all(|c| matches!(c, Component::Normal(_)))
+                || !seen.insert(path.clone())
+            {
+                return Err(io::Error::other("unsafe or duplicate archive path"));
+            }
+            let size = entry.size();
+            let total = report
+                .bytes
+                .checked_add(size)
+                .ok_or_else(|| io::Error::other("archive size overflow"))?;
+            if size > limits.max_file_bytes
+                || total > limits.max_total_bytes
+                || report.included >= limits.max_files
+            {
+                return Err(io::Error::other("archive exceeds limits"));
+            }
+            let target = destination.join(path);
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+            }
+            let mut out = options.open(target)?;
+            let written = io::copy(&mut entry, &mut out)?;
+            if written != size {
+                return Err(io::Error::other("incomplete archive entry"));
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mode = if entry.header().mode()? & 0o111 != 0 {
+                    0o700
+                } else {
+                    0o600
+                };
+                out.set_permissions(fs::Permissions::from_mode(mode))?;
+            }
+            report.bytes = total;
+            report.included += 1;
+        }
+        let mut limited = tar.into_inner();
+        io::copy(&mut limited, &mut io::sink())?;
+        if limited.limit() == 0 {
+            let mut extra = [0u8; 1];
+            if limited.get_mut().read(&mut extra)? != 0 {
+                return Err(io::Error::other("decompressed archive exceeds limit"));
+            }
+        }
+        Ok(report)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_dir_all(destination);
     }
     result
 }

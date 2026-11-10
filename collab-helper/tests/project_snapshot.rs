@@ -107,3 +107,94 @@ fn large_file_is_skipped_and_existing_archive_is_never_overwritten() {
     assert!(create_snapshot(&project, &project.join("nested.tar.gz"), limits).is_err());
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn safe_restore_requires_new_destination_and_preserves_existing_files() {
+    use openidea_collab_helper::project::restore_snapshot;
+    let root = temp_root();
+    let project = root.join("source");
+    fs::create_dir(&project).unwrap();
+    fs::write(project.join("main.txt"), "hello").unwrap();
+    let archive = root.join("snapshot.tar.gz");
+    create_snapshot(&project, &archive, Limits::default()).unwrap();
+    let dest = root.join("restored");
+    let report = restore_snapshot(&archive, &dest, Limits::default()).unwrap();
+    assert_eq!(report.included, 1);
+    assert_eq!(fs::read_to_string(dest.join("main.txt")).unwrap(), "hello");
+    fs::write(dest.join("main.txt"), "local work").unwrap();
+    assert!(restore_snapshot(&archive, &dest, Limits::default()).is_err());
+    assert_eq!(
+        fs::read_to_string(dest.join("main.txt")).unwrap(),
+        "local work"
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn safe_restore_rejects_traversal_and_links_without_leaving_destination() {
+    use openidea_collab_helper::project::restore_snapshot;
+    for (name, kind) in [
+        ("../outside", tar::EntryType::Regular),
+        ("link", tar::EntryType::Symlink),
+    ] {
+        let root = temp_root();
+        let archive = root.join("malicious.tar.gz");
+        let encoder = flate2::write::GzEncoder::new(
+            fs::File::create(&archive).unwrap(),
+            flate2::Compression::fast(),
+        );
+        let mut builder = tar::Builder::new(encoder);
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(kind);
+        header.set_size(0);
+        header.set_mode(0o644);
+        if kind == tar::EntryType::Symlink {
+            header.set_link_name("/etc/passwd").unwrap();
+        }
+        header.as_mut_bytes()[..name.len()].copy_from_slice(name.as_bytes());
+        header.set_cksum();
+        builder.append(&header, std::io::empty()).unwrap();
+        builder.into_inner().unwrap().finish().unwrap();
+        let dest = root.join("restored");
+        assert!(restore_snapshot(&archive, &dest, Limits::default()).is_err());
+        assert!(!dest.exists() && !root.join("outside").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[test]
+fn safe_restore_rejects_duplicate_entries_and_corrupted_gzip() {
+    use openidea_collab_helper::project::restore_snapshot;
+    let root = temp_root();
+    let archive = root.join("duplicate.tar.gz");
+    let encoder = flate2::write::GzEncoder::new(
+        fs::File::create(&archive).unwrap(),
+        flate2::Compression::fast(),
+    );
+    let mut builder = tar::Builder::new(encoder);
+    for _ in 0..2 {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(1);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "same.txt", &b"x"[..])
+            .unwrap();
+    }
+    builder.into_inner().unwrap().finish().unwrap();
+    let dest = root.join("restored");
+    assert!(restore_snapshot(&archive, &dest, Limits::default()).is_err());
+    assert!(!dest.exists());
+    let project = root.join("source");
+    fs::create_dir(&project).unwrap();
+    fs::write(project.join("x"), "test").unwrap();
+    let good = root.join("corrupt.tar.gz");
+    create_snapshot(&project, &good, Limits::default()).unwrap();
+    let mut bytes = fs::read(&good).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    fs::write(&good, bytes).unwrap();
+    assert!(restore_snapshot(&good, &dest, Limits::default()).is_err());
+    assert!(!dest.exists());
+    fs::remove_dir_all(root).unwrap();
+}

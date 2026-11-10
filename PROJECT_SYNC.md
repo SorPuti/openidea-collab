@@ -8,7 +8,7 @@ Host selects project → preview inclusion/exclusion → bounded archive
     → review conflicts → explicit apply → ongoing file operations + CRDT
 ```
 
-The current prototype streams a gzip-compressed tar archive without loading the whole project in memory, respects project `.gitignore` rules, skips symlinks and common dependency, build, virtual environment, VCS and credential paths, limits file count and size, and refuses to overwrite an archive. Limits currently default to 16 MiB per file, 512 MiB total and 50,000 files; larger individual files are omitted and counted. These filters cannot identify every secret: users need a review screen before sharing. The source directory must not be concurrently modified by untrusted users. Empty directories are not captured.
+The current prototype streams a gzip-compressed tar archive without loading the whole project in memory, respects project `.gitignore` rules, skips symlinks and common dependency, build, virtual environment, VCS and credential paths, limits file count and size, and refuses to overwrite an archive. A separate extraction prototype accepts only regular files in a new private staging directory and rejects traversal, duplicate paths, links, corrupt gzip and size limits; it never applies to an existing project. Limits currently default to 16 MiB per file, 512 MiB total and 50,000 files; larger individual files are omitted and counted. These filters cannot identify every secret: users need a review screen before sharing. The source and staging parent directories must not be concurrently modified by untrusted users. Empty directories are not captured. The extraction code still needs independent security review and adversarial testing.
 
 Before this becomes a product feature:
 
