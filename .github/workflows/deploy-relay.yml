@@ -1,0 +1,72 @@
+name: Build and deploy relay
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/deploy-relay.yml'
+      - 'deploy/**'
+      - 'src/relay/**'
+      - 'src/protocol/**'
+      - 'src/core/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+permissions:
+  contents: read
+concurrency:
+  group: relay-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Test deployment transaction
+        run: python3 -m unittest discover -s deploy/tests -v
+      - name: Test and build Linux relay
+        run: |
+          mkdir -p "$RUNNER_TEMP/relay"
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" -v "$RUNNER_TEMP/relay:/out" -w /work \
+            -e CARGO_TARGET_DIR=/tmp/collab-target \
+            rust:1.96-alpine@sha256:a41f7740f8b45d45795624eec13a8b42263cc700f19f7e4e86e04d3dda08a479 \
+            sh -ec 'apk add --no-cache build-base >/dev/null; cargo test --locked -p collab-server; cargo build --locked --release -p collab-server; cp /tmp/collab-target/release/collab-server /out/collab-server'
+          sha256sum "$RUNNER_TEMP/relay/collab-server" > "$RUNNER_TEMP/relay/sha256.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: relay-${{ github.sha }}
+          path: ${{ runner.temp }}/relay/collab-server
+          if-no-files-found: error
+          retention-days: 7
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: relay-${{ github.sha }}
+          path: ${{ runner.temp }}/relay
+      - name: Deploy verified build over restricted SSH
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_HOST: ${{ vars.COLLAB_DEPLOY_HOST }}
+          DEPLOY_KEY: ${{ secrets.COLLAB_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.COLLAB_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.-]+$ && -n "$DEPLOY_KEY" && -n "$KNOWN_HOSTS" ]]
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          [[ "$latest" == "$GITHUB_SHA" ]] || { echo 'A newer main commit exists; refusing stale deploy.' >&2; exit 1; }
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/relay_key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          digest=$(sha256sum "$RUNNER_TEMP/relay/collab-server" | cut -d' ' -f1)
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes \
+            -o ConnectTimeout=15 -i "$HOME/.ssh/relay_key" "openidea-deploy@$DEPLOY_HOST" \
+            "$GITHUB_SHA $digest" < "$RUNNER_TEMP/relay/collab-server"
