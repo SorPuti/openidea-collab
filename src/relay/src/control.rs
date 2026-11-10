@@ -31,6 +31,7 @@ pub(super) async fn health(State(relay): State<Relay>) -> StatusCode {
 pub(super) async fn info(State(relay): State<Relay>) -> Json<ServiceInfo> {
     Json(ServiceInfo {
         protocol: VERSION,
+        max_members_per_session: MAX_MEMBERS,
         websocket_url: relay.inner.endpoint.websocket(),
         max_frame_bytes: MAX_FRAME,
         max_transfer_bytes: MAX_TRANSFER,

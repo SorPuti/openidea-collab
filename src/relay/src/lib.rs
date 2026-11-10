@@ -40,7 +40,7 @@ use tokio::sync::{Semaphore, mpsc, watch};
 use uuid::Uuid;
 
 pub const MAX_SESSIONS: usize = 4;
-pub const MAX_MEMBERS: usize = 8;
+pub const MAX_MEMBERS: usize = 3;
 pub const MAX_CONNECTIONS: usize = 16;
 pub const MAX_DOCUMENTS: usize = 64;
 pub const QUEUE_FRAMES: usize = 4;

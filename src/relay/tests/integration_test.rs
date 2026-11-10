@@ -526,3 +526,42 @@ async fn client_supplied_identity_fields_are_refused() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+#[tokio::test]
+async fn room_has_three_members_and_refuses_fourth_invitee() {
+    let server = Server::start(None).await;
+    let owner = server.create().await;
+    let second = server.join(&owner, Role::Editor).await;
+    let third = server.join(&owner, Role::Viewer).await;
+    assert_ne!(owner.member_id, second.member_id);
+    assert_ne!(second.member_id, third.member_id);
+
+    let invitation = server.invite(&owner, Role::Editor).await;
+    let redeem = Endpoint::parse(&server.origin)
+        .unwrap()
+        .parse_invitation(&invitation.url)
+        .unwrap();
+    let response = server
+        .http
+        .post(server.url("/v1/invitations/redeem"))
+        .json(&redeem)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        response.json::<serde_json::Value>().await.unwrap()["error"],
+        "member_limit"
+    );
+
+    let info: serde_json::Value = server
+        .http
+        .get(server.url("/v1/info"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(info["max_members_per_session"], 3);
+}

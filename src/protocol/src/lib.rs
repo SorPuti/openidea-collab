@@ -67,6 +67,7 @@ pub struct RegisterDocument {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ServiceInfo {
     pub protocol: u8,
+    pub max_members_per_session: usize,
     pub websocket_url: String,
     pub max_frame_bytes: usize,
     pub max_transfer_bytes: usize,
