@@ -16,7 +16,8 @@ openidea-plugin pack "$root/openidea-collab" --out "$stage/collab-client/plugin.
 openidea-plugin check "$stage/collab-client/plugin.oiplugin"
 install -m 755 "$helper" "$stage/collab-client/openidea-collab-helper"
 install -m 755 "$server" "$stage/collab-client/collab-server"
-install -m 755 "$root/scripts/install-client.sh" "$stage/collab-client/install-client.sh"
-(cd "$stage/collab-client" && sha256sum plugin.oiplugin openidea-collab-helper collab-server > SHA256SUMS)
+install -m 755 "$root/scripts/install-client.sh" "$stage/collab-client/install.sh"
+install -m 755 "$root/scripts/register-dev-plugin.py" "$stage/collab-client/register-dev-plugin.py"
+(cd "$stage/collab-client" && sha256sum plugin.oiplugin openidea-collab-helper collab-server register-dev-plugin.py > SHA256SUMS)
 tar -czf "$output" -C "$stage" collab-client
 printf 'Unsigned client bundle: %s\n' "$output"

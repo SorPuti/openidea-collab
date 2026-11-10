@@ -8,12 +8,12 @@ Download the `openidea-collab-client-linux-x86_64.tar.gz` artifact from a releas
 
 ```sh
 cd collab-client
-bash install-client.sh
+bash install.sh
 ```
 
-The script verifies the included files and copies them to a new directory under `~/.local/share/openidea-collab-client`. No Rust toolchain, OpenIDEA plugin CLI, server or tunnel is installed on the client. To also install the prebuilt local server on a host, run `bash install-client.sh --server`; it prints a script to start it manually and does not start it automatically. Checksums detect corruption but are not a signature. This is currently an **unsigned experimental package**.
+The script requires Python 3.11+, verifies the included files, copies them to a new directory under `~/.local/share/openidea-collab-client`, and registers the plugin in OpenIDEA's development links. No Rust toolchain, OpenIDEA plugin CLI, server or tunnel is installed on the client. To also install the prebuilt local server on a host, run `bash install.sh --server`; it prints a script to start it manually and does not start it automatically. Checksums detect corruption but are not a signature. This is currently an **unsigned experimental package**.
 
-In OpenIDEA, use **Settings → Plugins → Install Plugin from Package File…** and select the printed `plugin.oiplugin`. In its `process:openidea-collab-helper` permission, choose and approve the printed helper executable. The helper can execute code on your machine; approve it only if you trust the package. Open a trusted project and open a `.collabtest` file: it now opens directly in the collaborative editor. **Open as Text** remains available from the IDE.
+In OpenIDEA, open **Settings → Plugins** to load the registered development link. In its `process:openidea-collab-helper` permission, choose and approve the printed helper executable. The helper can execute code on your machine; approve it only if you trust the package. Open a trusted project and open a `.collabtest` file: it now opens directly in the collaborative editor. **Open as Text** remains available from the IDE. If an installed package with the same ID already exists, remove it using OpenIDEA first; the script will not overwrite it.
 
 On both machines select the same server and document name. Create a session in one editor, make a one-use invite, and enter it in the other editor. Both local files must initially have the same text. Do not post the invite publicly: it grants room access. The server URL `http://127.0.0.1:4445` only reaches the current machine; it is not a connection between different machines.
 
