@@ -1,0 +1,45 @@
+id = "sorputi.openidea-collab"
+name = "OpenIDEA Collab"
+version = "0.3.0"
+description = "Prepare secure collaboration sessions through collab.synthosia.com. Native realtime requires new host APIs."
+authors = ["OpenIDEA Collab contributors"]
+license = "MIT"
+change-notes = "Secure relay session preparation; unsafe legacy file synchronization removed. Native realtime remains unavailable on API 1.4."
+categories = ["tools"]
+engines.openidea = "^1.4"
+wasm = "dist/plugin.wasm"
+activation = ["on-command:*", "on-view:collab-panel"]
+
+[capabilities]
+required = ["project.read", "storage", "secrets", "net:collab.synthosia.com"]
+
+[[contributes.secrets]]
+name = "member-credential"
+label = "Collaboration member credential"
+description = "Stored automatically for one explicitly prepared project/session; never saved in project files."
+
+[[contributes.commands]]
+id = "create-session"
+title = "Collab: Prepare Session"
+category = "Collab"
+
+[[contributes.commands]]
+id = "join-session"
+title = "Collab: Accept Invitation"
+category = "Collab"
+
+[[contributes.commands]]
+id = "create-invite"
+title = "Collab: Create Invitation"
+category = "Collab"
+
+[[contributes.commands]]
+id = "leave-session"
+title = "Collab: Leave Session"
+category = "Collab"
+
+[[contributes.views]]
+id = "collab-panel"
+title = "Collaboration"
+icon = "users"
+location = "right"

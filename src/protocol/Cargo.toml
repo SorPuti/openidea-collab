@@ -1,0 +1,15 @@
+[package]
+name = "openidea-collab-protocol"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+url = "2"
+uuid = { version = "1", features = ["serde", "v4"] }
+
+
+[dev-dependencies]
+wit-parser = "0.262"

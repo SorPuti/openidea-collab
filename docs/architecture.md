@@ -1,32 +1,33 @@
 # Architecture
 
-The repository contains two independently built Rust components. `openidea-collab` runs as a WASM component inside OpenIDEA and accesses the project through the host SDK. `collab-server` is an Axum 0.8/Tokio HTTP service with an in-memory room map.
+All source is in `src/`; root files describe the workspace and repository ownership. Product modules are independent of documentation, deployment configuration and GitHub metadata.
 
-## Current flow
+| Component | Responsibility |
+| --- | --- |
+| `src/protocol` | Typed HTTPS schemas, exact-origin invitation parsing, bounded binary framing |
+| `src/core` | Yrs UTF-16 documents, incremental updates, bounded pending queue, integrity/project-bound checkpoints, chunk reassembly and lexical sharing policy |
+| `src/relay` | Authentication/authorization, invitation lifecycle, opaque byte fanout and small persisted authorization metadata |
+| `src/plugin` | Native OpenIDEA UI and explicit HTTPS session preparation on the released SDK |
+| `src/tooling` | Checks, packaging, release validation and automation tests |
 
-1. A client creates a room, then joins with a display name and receives a user ID.
-2. File-save events read the whole file and POST its path, text, user ID and known version.
-3. The server stores the latest text and emits a versioned file-update event.
-4. Scheduled plugin events poll the event stream. For a newer file version, the client fetches the current text and writes it through the project API.
-5. Editor focus sends file/cursor presence. The UI renders received presence snapshots.
+## Data plane
 
-The room ID is an invitation locator, but currently also acts as the only access gate. User IDs are supplied by the client and are not authenticated. Room state is stored in global plugin storage. See [security.md](security.md).
+The intended path is native editor → plugin CRDT → host-owned background WSS → relay → peer host/plugin/editor. No local helper, tunnel or system service is needed on collaborator machines. The relay does not depend on the CRDT crate and never reconstructs a document.
 
-## HTTP routes
+Each received update is validated by the client core. Application fanout shares one immutable byte allocation across recipients. Per-recipient queues, rates and connection permits are bounded. Metadata commits run on a blocking task; the networking runtime uses one async worker. No database, broker or compression context per connection is required.
 
-| Method | Route | Result |
-| --- | --- | --- |
-| POST | `/rooms` | Create a room |
-| GET | `/rooms/{id}` | Room and members |
-| POST | `/rooms/{id}/join` | Join; returns `user_id` |
-| DELETE | `/rooms/{id}/members/{uid}` | Remove a member |
-| GET / POST | `/rooms/{id}/files/{*path}` | Read / update full file text |
-| GET | `/rooms/{id}/members` | Presence snapshots |
-| POST | `/rooms/{id}/members/{uid}/presence` | Update presence |
-| GET | `/rooms/{id}/events?cursor=N` | Events and next cursor |
+The standalone core currently stages a CRDT document before accepting changes to enforce limits without corrupting the previous state. This prioritizes correctness and is **not a demonstrated low-latency native-editor integration**. Measure and reduce snapshot/staging overhead before connecting it to the keystroke path; no end-to-end performance claim is made.
 
-Axum 0.8 uses brace-based parameters. An empty event poll sleeps five seconds and rechecks; it is not immediately awakened by new events. Events and file history are not durable.
+## Safety and lifecycle
 
-## Concurrency limitations
+The pinned host lacks native document subscriptions and background WebSockets. Therefore the plugin has no file-save subscription and no project-write capability; prepared sessions exchange metadata only. The unsafe legacy REST file store and automatic global-room restoration are removed from the active implementation.
 
-Updates with a mismatching version from a different user receive HTTP 409 and the current server version/text. The client currently discards that structured conflict response. The server allows stale updates attributed to the same user. `document.rs` provides a merge helper, but the update route does not call it. Pending local edits and failed remote writes are not reliably retained. These are open correctness requirements, not supported merge behavior.
+The local project identity is hashed for storage, never sent to the relay. All session operations that can invite or prepare require the same invoking project; a project switch requires leaving/reassociating explicitly. A future file adapter must enforce the lexical allowlist **and** no-follow handles; lexical validation alone does not prove filesystem safety.
+
+Native undo/redo, versioned remote changes, nonfocused documents and persistent host event delivery remain the host API boundary described in [host-api.md](host-api.md).
+
+## Durability
+
+Relay metadata contains token digests, UUIDs, roles, expiry and registered document IDs only. It is committed through private temp files, fsync and atomic replacement; no success response is sent before the metadata commit succeeds. Document traffic does not write disk.
+
+The client core checkpoint includes its CRDT state and pending update IDs, a generation, the local project identity and an integrity digest. A checkpoint in memory is not a durability ACK: the IDE persistence adapter is still required. The relay never acknowledges content as durable. The plugin's current session preparation does not enable the core editing engine or imply offline editing recovery.

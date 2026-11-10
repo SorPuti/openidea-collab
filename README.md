@@ -1,54 +1,60 @@
 # OpenIDEA Collab
 
-Experimental file collaboration plugin for [OpenIDEA](https://github.com/l0ng-ai/openidea), with a Rust/WASM plugin and a standalone HTTP server.
+Open-source collaboration for [OpenIDEA](https://github.com/l0ng-ai/openidea), using a small authenticated relay at **collab.synthosia.com**. MIT licensed.
 
-**Status: not approved for marketplace listing.** The historical `v0.1.0` package has unresolved safety and provenance issues. The current source still needs sharing boundaries, project-bound sessions, participant authentication and reliable conflict recovery. See [security and data handling](docs/security.md) before running it.
+**Status:** the relay and HTTPS session preparation are implemented. Native realtime editing is **not available in the current OpenIDEA API**. The plugin explicitly reports this limitation and never uploads project files or applies remote writes. This source is not an approved marketplace release, and this repository does not establish that the domain is deployed.
 
-## What works today
+## Install as a collaborator
 
-- Create, join and leave rooms.
-- Upload the full text of a saved file and retrieve remote file updates.
-- Display participant names, optional GitHub usernames, current files and cursor snapshots.
-- Reject some concurrent updates with HTTP 409. Automatic three-way merging is not integrated.
+The intended distribution is one signed `.oiplugin` installed through **Settings → Plugins**. No Rust, server, tunnel, VPN or native helper is required on the collaborator's machine. The package currently prepares sessions and invitations only; live editing remains gated on the public host APIs described in [the integration proposal](docs/host-api.md).
 
-Remote changes are polled on scheduled events. The manifest requests a 60-second schedule; the server waits five seconds before rechecking an empty event stream. This is file synchronization on save, not character-by-character collaborative editing. No subsecond latency guarantee is made.
+The plugin uses `https://collab.synthosia.com` for session control. Invitations contain a temporary, single-use secret in the URL fragment. Realtime transport is **WSS**, terminated by the operator's TLS reverse proxy; the Rust relay binds to loopback. HTTPS and WSS serve different parts of the same protocol.
 
-## Development quick start
+## Repository layout
 
-Use only disposable projects and synthetic data while the safety work remains open. The server currently binds to **all IPv4 interfaces** and has no participant authentication; isolate it from untrusted networks.
+All implementation and tooling source lives under `src/`:
 
-```sh
-git clone https://github.com/SorPuti/openidea-collab.git
-cd openidea-collab
-cargo run --locked --manifest-path collab-server/Cargo.toml
+```text
+src/
+  protocol/   shared control schemas and bounded binary frames
+  core/       UTF-16 CRDT, chunk reassembly, checkpoints and sharing policy
+  relay/      authenticated HTTP control plane and WebSocket forwarding
+  plugin/     OpenIDEA WASM session preparation and native UI
+  tooling/    build, packaging, validation and release scripts/tests
 ```
 
-The default port is `4444`; set `COLLAB_PORT` to change it. `RUST_LOG` controls logging. Rooms, file contents and events are held in memory and disappear when the server stops.
+`docs/` contains documentation, `deploy/` operator configuration, `.github/` repository automation and ownership, and root Cargo files workspace metadata. Tests live with their components. There is one workspace lockfile and one pinned Rust toolchain.
 
-In a second terminal, install the CLI matching the SDK and build the plugin:
+## Develop
+
+Developers need Rust 1.96.0 (selected by `rust-toolchain.toml`); users installing the plugin do not.
 
 ```sh
-rustup toolchain install 1.96.0 --profile minimal
-cargo +1.96.0 install --locked --git https://github.com/l0ng-ai/openidea --tag v0.1.40 ide-host --bin openidea-plugin
-openidea-plugin build openidea-collab
-openidea-plugin link openidea-collab
+cargo test --locked --workspace
+./src/tooling/check.sh
 ```
 
-Restart OpenIDEA. In a disposable project, use **Collab: Create Room** or **Collab: Join Room** and share the room ID with the second participant. **Collab: Leave Room** ends participation. **Collab: Set Server URL** changes the endpoint; the default is `http://localhost:4444`. Localhost and IPv4 loopback network permissions are declared. Other hosts need explicit manifest permissions and a development rebuild; arbitrary remote URLs are not supported by the default permissions.
+To run the relay locally:
 
-Development linking bypasses publisher verification. It does not establish marketplace approval or resolve the safety issues. The legacy `install.sh` also installs services and can consume historical release assets; prefer the explicit development steps above during remediation.
+```sh
+cargo run --locked -p collab-server
+```
 
-## Repository
+Defaults: `127.0.0.1:4444`, public origin `https://collab.synthosia.com`, private authorization metadata in `./collab-state/metadata.json`. Documents, updates and credentials in plaintext are not written to that file. Use a dedicated state directory. The public service still needs operator deployment, TLS and abuse controls; see [operations](docs/operations.md).
 
-| Path | Purpose |
-| --- | --- |
-| `openidea-collab/` | WASM plugin, client, sync and presence panel |
-| `collab-server/` | Axum server, rooms and in-memory event/file stores |
-| `scripts/` | Development, validation and packaging helpers |
-| `docs/` | Architecture, data handling, manual validation and releases |
+To build a development plugin package with the official CLI v0.1.40 available:
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks and contribution conventions, [architecture](docs/architecture.md) for the protocol, and [release instructions](docs/releasing.md) for packaging. [CHANGELOG.md](CHANGELOG.md) distinguishes source changes from published releases.
+```sh
+./src/tooling/package-dev.sh
+openidea-plugin link target/plugin-package
+```
 
-## License
+A development link bypasses publisher verification. It does not imply marketplace approval. See [installation](docs/installation.md) and [releases](docs/releasing.md).
 
-MIT; see [LICENSE](LICENSE). OpenIDEA SDK and CLI dependencies retain their own licenses and notices. See the [release instructions](docs/releasing.md) for the dependency-notice review required before distribution.
+## Limits and data handling
+
+The relay forwards opaque binary updates without constructing CRDT documents. It bounds sessions, participants, frame size, input rates and output queues. A slow recipient is disconnected for resynchronization. Only small authorization metadata is persisted, through atomic replacement and fsync. End-to-end encryption is not implemented: the operator can inspect transient bytes.
+
+A relay receipt is not a durability ACK. Clients must retain state and pending updates; joining requires an authorized peer with a document copy. A URL is not a cloud backup. The standalone core supplies bounded checkpoints, but integration with actual IDE persistence/undo remains unimplemented.
+
+Read [architecture](docs/architecture.md), [protocol](docs/protocol.md), [security](docs/security.md), [implementation status](docs/implementation-status.md), [contributing](CONTRIBUTING.md), and [license notices](NOTICE).

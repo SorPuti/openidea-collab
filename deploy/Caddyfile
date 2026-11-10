@@ -1,0 +1,9 @@
+# Operator configuration. DNS and a running relay are prerequisites.
+collab.synthosia.com {
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        Referrer-Policy "no-referrer"
+        X-Content-Type-Options "nosniff"
+    }
+    reverse_proxy 127.0.0.1:4444
+}

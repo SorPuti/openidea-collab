@@ -1,0 +1,26 @@
+name: Bug report
+description: Report a reproducible problem without private code or credentials.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Plugin, relay and OpenIDEA versions
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and architecture
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Steps, expected behavior and actual behavior. Use synthetic data; redact invitation links, tokens and source content.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Verification or sanitized diagnostic output

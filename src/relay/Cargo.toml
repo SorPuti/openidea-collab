@@ -1,0 +1,25 @@
+[package]
+name = "collab-server"
+version = "0.2.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+openidea-collab-protocol = { path = "../protocol" }
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+rand = "0.8"
+sha2 = "0.10"
+base64 = "0.22"
+bytes = "1"
+futures-util = { version = "0.3", features = ["sink"] }
+tempfile = "3"
+subtle = "2"
+
+[dev-dependencies]
+openidea-collab-core = { path = "../core" }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+tokio-tungstenite = "0.29"

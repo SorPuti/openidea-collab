@@ -1,0 +1,13 @@
+[package]
+name = "openidea-collab-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+yrs = { version = "=0.28.0", features = ["sync"] }
+openidea-collab-protocol = { path = "../protocol" }
+sha2 = "0.10"
+
+uuid = { version = "1", features = ["v4"] }
