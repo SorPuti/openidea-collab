@@ -4,15 +4,15 @@
 
 The goal is one reviewed, signed package in OpenIDEA Settings → Plugins, followed by Prepare/Create Session or Accept Invitation. No external installer, Rust, CLI, native helper, server, VPN or tunnel is needed on a collaborator's computer. Installing the plugin does not transmit files.
 
-The current package prepares relay sessions only. It explicitly reports that native realtime needs public host APIs that the pinned release does not provide. A marketplace package must not advertise live editing before those APIs and the two-IDE acceptance tests pass. This domain configuration is not evidence of an active hosted service.
+The 0.4.0 development package provides realtime only in an OpenIDEA build containing PR #2544. Marketplace installation must wait for that API's official release and the multi-IDE acceptance tests. The hosted relay is active, but service availability does not imply marketplace approval.
 
-The owner prepares a session, generates an invitation, and sends the link. The recipient pastes it into the native plugin dialog and confirms the relay. The link is exact-origin validated and redeemed once. Opening it in a browser displays a minimal copy page without tracking. A deep link that launches an IDE plugin command is not implemented or claimed.
+The owner prepares a session, generates an invitation, and sends the link. The recipient pastes it into the native plugin dialog and confirms the relay. The link is exact-origin validated and redeemed once. Each participant then focuses the same project-relative document and confirms **Share Current Document**; unsaved text is included. Nothing else in the project is scanned or uploaded.
 
 A production package is installed by the IDE using the registered publisher key. The host handles versioned installation and package rollback. The old root `install.sh` was removed: a source script that compiles code, edits shell startup files and installs a login service is not the collaborator installation experience.
 
 ## Developers
 
-Use the repository Rust toolchain and the official OpenIDEA CLI v0.1.40:
+Use the repository Rust toolchain and an OpenIDEA CLI built from PR #2544:
 
 ```sh
 ./src/tooling/package-dev.sh
@@ -23,7 +23,7 @@ This stages the WASM, manifest, translations, root LICENSE/NOTICE and package RE
 
 ## Operators
 
-Only the relay operator installs a server and TLS proxy. See [operations.md](operations.md). DNS, hosting and public deployment have not been performed by this code change.
+Only the relay operator installs a server and TLS proxy. See [operations.md](operations.md). The public domain currently serves the protocol; operators still own monitoring, admission controls and incident response.
 
 ## Updates and removal
 

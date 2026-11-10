@@ -1,30 +1,36 @@
-//! Secure relay control plane. Realtime deliberately stays disabled until the
-//! public host supports background sockets and native document transactions.
+//! Explicitly scoped realtime collaboration over the project-bound host API.
 pub mod client;
+pub mod realtime;
 pub mod state;
 use openidea_collab_protocol::{DEFAULT_ORIGIN, Role};
 use openidea_plugin::{
-    Context, Error, Invocation, Plugin, host, register_plugin,
+    Context, Error, Event, EventKind, Invocation, NotificationLevel, Plugin, Project, host,
+    register_plugin,
     views::{Body, Button, Field, FieldValue, View, ViewEvent, Viewport, Views},
 };
 const PANEL: &str = "collab-panel";
-const LIMITATION: &str = "Native realtime is not available on this host API. Session preparation sends no project files. WebSocket and native document APIs are required before editing can be shared.";
-fn limitation() -> &'static str {
+fn ready_status() -> &'static str {
     if host::locale().starts_with("pt") {
-        "A edição em tempo real ainda precisa de novas APIs públicas da IDE. Preparar uma sessão não envia arquivos do projeto."
+        "Sessão preparada. Conecte o realtime e compartilhe explicitamente o documento aberto."
     } else {
-        LIMITATION
+        "Session prepared. Connect realtime, then explicitly share the open document."
     }
 }
 #[derive(Default)]
 pub struct CollabPlugin {
     invitation: Option<String>,
+    realtime: Option<realtime::Realtime>,
 }
 impl Plugin for CollabPlugin {
     fn activate(&mut self, _context: &Context) -> Result<(), Error> {
         // Remove the unsafe legacy auto-restored room. No network or file access.
         host::storage::delete("room_state")?;
+        host::subscribe(EventKind::WebsocketReady)?;
         Ok(())
+    }
+    fn deactivate(&mut self) {
+        self.realtime = None;
+        let _ = host::subscribe_paths("document-changed", &[]);
     }
     fn run_command(
         &mut self,
@@ -39,7 +45,9 @@ impl Plugin for CollabPlugin {
                 }
                 if !host::confirm(
                     "Prepare collaboration session",
-                    &format!("Relay: {DEFAULT_ORIGIN}\n{}", limitation()),
+                    &format!(
+                        "Relay: {DEFAULT_ORIGIN}\nOnly documents you explicitly share will be transmitted. The relay can inspect transient encrypted-transport payloads."
+                    ),
                 )? {
                     return Ok(None);
                 }
@@ -52,6 +60,7 @@ impl Plugin for CollabPlugin {
                     client::join(invitation.trim())?
                 };
                 state::save(ctx, credential)?;
+                self.connect(ctx)?;
             }
             "create-invite" => {
                 let session = state::for_project(ctx)?
@@ -74,16 +83,176 @@ impl Plugin for CollabPlugin {
                         &session.session_id.to_string(),
                         &session.member_id.to_string(),
                     )?;
+                    self.disconnect()?;
                     state::forget()?;
                 }
                 self.invitation = None;
             }
+            "connect-realtime" => self.connect(ctx)?,
+            "disconnect-realtime" => self.disconnect()?,
+            "share-current-document" => self.share_current(ctx)?,
+            "stop-sharing-current-document" => self.stop_sharing_current(ctx)?,
             _ => return Err(Error::NotFound("Unknown collaboration action".into())),
         }
         host::refresh_view(PANEL);
         Ok(None)
     }
+
+    fn handle_events(&mut self, events: &[Event], ctx: &Invocation) {
+        let Some(_) = self.realtime else { return };
+        let project = self.project(ctx);
+        let result = project.and_then(|project| {
+            let connected = self
+                .realtime
+                .as_mut()
+                .expect("checked above")
+                .handle_events(&project, events)?;
+            if !connected {
+                self.realtime = None;
+            }
+            Ok(())
+        });
+        if let Err(error) = result {
+            host::notify(
+                NotificationLevel::Error,
+                "Collaboration update refused",
+                &error.to_string(),
+            );
+        }
+        host::refresh_view(PANEL);
+    }
 }
+
+impl CollabPlugin {
+    fn project(&self, ctx: &Invocation) -> Result<Project, Error> {
+        let session =
+            state::load()?.ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
+        if let Some(project) = ctx.project()
+            && project_identity_matches(&project, session.project)?
+        {
+            return Ok(project);
+        }
+        host::projects()?
+            .into_iter()
+            .find_map(|project| {
+                project_identity_matches(&project, session.project)
+                    .ok()
+                    .filter(|same| *same)
+                    .map(|_| project)
+            })
+            .ok_or_else(|| {
+                Error::NotFound(
+                    "The project bound to this collaboration session is not open".into(),
+                )
+            })
+    }
+
+    fn connect(&mut self, ctx: &Invocation) -> Result<(), Error> {
+        if self.realtime.is_some() {
+            return Ok(());
+        }
+        let session = state::for_project(ctx)?
+            .ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
+        let project = ctx
+            .project()
+            .ok_or_else(|| Error::Invalid("Open the session project first".into()))?;
+        self.realtime = Some(realtime::Realtime::connect(&project, &session)?);
+        Ok(())
+    }
+
+    fn disconnect(&mut self) -> Result<(), Error> {
+        self.realtime = None;
+        host::subscribe_paths("document-changed", &[])
+    }
+
+    fn share_current(&mut self, ctx: &Invocation) -> Result<(), Error> {
+        self.connect(ctx)?;
+        let project = ctx
+            .project()
+            .ok_or_else(|| Error::Invalid("Open the session project first".into()))?;
+        let editor = ctx
+            .editor()
+            .ok_or_else(|| Error::Invalid("Focus the document you want to share".into()))?;
+        let mut session = state::for_project(ctx)?
+            .ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
+        let shared = realtime::shared_document(&project, &editor.path(), session.session_id)?;
+        if session
+            .documents
+            .iter()
+            .any(|document| document.document_id == shared.document_id)
+        {
+            return Err(Error::Invalid("This document is already shared".into()));
+        }
+        if !host::confirm(
+            "Share document",
+            &format!(
+                "Share {} with up to two authenticated collaborators? Its unsaved editor text and later edits will be transmitted through {DEFAULT_ORIGIN}.",
+                shared.path
+            ),
+        )? {
+            return Ok(());
+        }
+        self.realtime
+            .as_mut()
+            .expect("connected above")
+            .add_document(&project, shared.clone())?;
+        session.documents.push(shared);
+        if let Err(error) = state::store(&session) {
+            if let Some(shared) = session.documents.pop() {
+                let _ = self
+                    .realtime
+                    .as_mut()
+                    .expect("connected above")
+                    .remove_document(&shared);
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn stop_sharing_current(&mut self, ctx: &Invocation) -> Result<(), Error> {
+        let project = ctx
+            .project()
+            .ok_or_else(|| Error::Invalid("Open the session project first".into()))?;
+        let editor = ctx
+            .editor()
+            .ok_or_else(|| Error::Invalid("Focus the shared document".into()))?;
+        let mut session = state::for_project(ctx)?
+            .ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
+        let shared = realtime::shared_document(&project, &editor.path(), session.session_id)?;
+        let Some(index) = session
+            .documents
+            .iter()
+            .position(|document| document.document_id == shared.document_id)
+        else {
+            return Err(Error::Invalid("This document is not shared".into()));
+        };
+        if !host::confirm(
+            "Stop sharing",
+            &format!(
+                "Stop sharing {}? Local content will be preserved.",
+                shared.path
+            ),
+        )? {
+            return Ok(());
+        }
+        let shared = session.documents.remove(index);
+        state::store(&session)?;
+        if let Some(runtime) = &mut self.realtime
+            && let Err(error) = runtime.remove_document(&shared)
+        {
+            self.realtime = None;
+            let _ = host::subscribe_paths("document-changed", &[]);
+            return Err(error);
+        }
+        Ok(())
+    }
+}
+
+fn project_identity_matches(project: &Project, expected: [u8; 32]) -> Result<bool, Error> {
+    Ok(openidea_collab_core::policy::project_identity(&project.root()?) == expected)
+}
+
 impl Views for CollabPlugin {
     fn render(
         &mut self,
@@ -94,9 +263,13 @@ impl Views for CollabPlugin {
         if view != PANEL {
             return Err(Error::NotFound("Unknown collaboration view".into()));
         }
+        let status = self.realtime.as_ref().map_or_else(
+            || ready_status().to_owned(),
+            |runtime| runtime.status().to_owned(),
+        );
         let mut fields = vec![
             Field::new("relay", "Relay", FieldValue::label(DEFAULT_ORIGIN)),
-            Field::new("status", "Status", FieldValue::label(limitation())),
+            Field::new("status", "Status", FieldValue::label(&status)),
         ];
         let session = state::for_project(ctx);
         if !matches!(&session, Ok(Some(_))) {
@@ -109,12 +282,51 @@ impl Views for CollabPlugin {
                 FieldValue::readonly_text(invitation, false),
             ));
         }
+        if let Ok(Some(session)) = &session
+            && !session.documents.is_empty()
+        {
+            fields.push(Field::new(
+                "documents",
+                "Shared documents",
+                FieldValue::readonly_text(
+                    &session
+                        .documents
+                        .iter()
+                        .map(|document| document.path.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    true,
+                ),
+            ));
+        }
         let mut page = View::new(Body::Form(fields));
         match session {
             Ok(Some(session)) => {
                 if session.role == Role::Owner {
                     page =
                         page.button(Button::new("create-invite", "Create Invitation").icon("add"));
+                }
+                if self.realtime.is_some() {
+                    page = page
+                        .button(
+                            Button::new("share-current-document", "Share Current Document")
+                                .icon("add"),
+                        )
+                        .button(
+                            Button::new(
+                                "stop-sharing-current-document",
+                                "Stop Sharing Current Document",
+                            )
+                            .icon("remove"),
+                        )
+                        .button(
+                            Button::new("disconnect-realtime", "Disconnect Realtime")
+                                .icon("debug-disconnect"),
+                        );
+                } else {
+                    page = page.button(
+                        Button::new("connect-realtime", "Connect Realtime").icon("debug-connect"),
+                    );
                 }
                 page = page.button(Button::new("leave-session", "Leave Session").icon("close"));
             }

@@ -798,7 +798,7 @@ dependencies = [
 [[package]]
 name = "openidea-plugin"
 version = "0.1.0"
-source = "git+https://github.com/l0ng-ai/openidea?tag=v0.1.40#37c2a6048eea89d4f6db645622612358b643862b"
+source = "git+https://github.com/SorPuti/openidea?rev=f8d1826139bef93d4526512bf7bc087b7d374e85#f8d1826139bef93d4526512bf7bc087b7d374e85"
 dependencies = [
  "serde",
  "serde_json",
@@ -807,8 +807,9 @@ dependencies = [
 
 [[package]]
 name = "openidea-plugin-openidea-collab"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "base64 0.22.1",
  "openidea-collab-core",
  "openidea-collab-protocol",
  "openidea-plugin",
@@ -1218,6 +1219,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1569,6 +1576,7 @@ dependencies = [
  "getrandom 0.4.3",
  "js-sys",
  "serde_core",
+ "sha1_smol",
  "wasm-bindgen",
 ]
 

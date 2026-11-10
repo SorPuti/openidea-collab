@@ -51,6 +51,22 @@ impl Default for Document {
     }
 }
 impl Document {
+    pub fn from_text(value: &str) -> Result<Self, &'static str> {
+        if value.len() > MAX_TEXT {
+            return Err("document limit");
+        }
+        let doc = empty();
+        let text = doc.get_or_insert_text("content");
+        text.insert(&mut doc.transact_mut(), 0, value);
+        if snapshot(&doc).len() > MAX_TRANSFER {
+            return Err("document limit");
+        }
+        Ok(Self {
+            doc,
+            pending: VecDeque::new(),
+            generation: 1,
+        })
+    }
     pub fn text(&self) -> String {
         content(&self.doc)
     }
@@ -60,6 +76,12 @@ impl Document {
     pub fn state_vector(&self) -> Vec<u8> {
         use yrs::updates::encoder::Encode;
         self.doc.transact().state_vector().encode_v1()
+    }
+    pub fn snapshot(&self) -> Vec<u8> {
+        snapshot(&self.doc)
+    }
+    pub fn operation(&self, id: Uuid) -> Option<&Operation> {
+        self.pending.iter().find(|operation| operation.id == id)
     }
     pub fn diff(&self, vector: &[u8]) -> Result<Vec<u8>, &'static str> {
         if vector.len() > 64 * 1024 {
@@ -80,7 +102,16 @@ impl Document {
         Ok(())
     }
     pub fn edit(&mut self, from: u32, to: u32, insert: &str) -> Result<Uuid, &'static str> {
-        if insert.len() > MAX_TEXT || self.pending.len() >= MAX_OPERATIONS {
+        self.edit_batch(&[(from, to, insert)])
+    }
+    /// Applies non-overlapping replacements whose offsets all refer to the
+    /// document before this batch. Edits are committed as one CRDT update.
+    pub fn edit_batch(&mut self, edits: &[(u32, u32, &str)]) -> Result<Uuid, &'static str> {
+        if edits.is_empty()
+            || edits.len() > MAX_OPERATIONS
+            || edits.iter().any(|(_, _, insert)| insert.len() > MAX_TEXT)
+            || self.pending.len() >= MAX_OPERATIONS
+        {
             return Err("outbox or document limit");
         }
         let current = self.text();
@@ -94,8 +125,15 @@ impl Document {
                 at == offset
             })
         };
-        if from > to || !boundary(from) || !boundary(to) {
-            return Err("invalid UTF-16 range");
+        let mut ordered = edits.to_vec();
+        ordered.sort_by_key(|(from, to, _)| (*from, *to));
+        let mut previous_to = 0;
+        for (index, (from, to, _)) in ordered.iter().enumerate() {
+            if from > to || !boundary(*from) || !boundary(*to) || (index > 0 && *from < previous_to)
+            {
+                return Err("invalid UTF-16 range");
+            }
+            previous_to = *to;
         }
         let staged = empty();
         apply(&staged, &snapshot(&self.doc))?;
@@ -103,8 +141,10 @@ impl Document {
         let vector = staged.transact().state_vector();
         {
             let mut txn = staged.transact_mut();
-            text.remove_range(&mut txn, from, to - from);
-            text.insert(&mut txn, from, insert);
+            for (from, to, insert) in ordered.into_iter().rev() {
+                text.remove_range(&mut txn, from, to - from);
+                text.insert(&mut txn, from, insert);
+            }
         }
         let update = staged.transact().encode_state_as_update_v1(&vector);
         if self.pending.iter().map(|op| op.update.len()).sum::<usize>() + update.len() > MAX_OUTBOX
@@ -241,5 +281,17 @@ mod tests {
         assert!(Document::restore(&checkpoint, [3; 32]).is_err());
         checkpoint[50] ^= 1;
         assert!(Document::restore(&checkpoint, [2; 32]).is_err());
+    }
+
+    #[test]
+    fn seeds_without_an_outbox_and_applies_a_utf16_batch_in_original_coordinates() {
+        let mut doc = Document::from_text("A😀BC").unwrap();
+        assert!(doc.pending().is_empty());
+        assert!(!doc.snapshot().is_empty());
+        let id = doc.edit_batch(&[(0, 1, "α"), (4, 5, "β")]).unwrap();
+        assert_eq!(doc.text(), "α😀Bβ");
+        assert_eq!(doc.operation(id).unwrap().id, id);
+        assert!(doc.edit_batch(&[(2, 3, "bad")]).is_err());
+        assert!(doc.edit_batch(&[(0, 2, "x"), (1, 3, "y")]).is_err());
     }
 }

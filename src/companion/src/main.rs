@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     Input::Send { data_hex } => {
                         let Some(tx)=ws_tx.as_ref() else { event_tx.send(Output::Error{message:"not_connected"}).await?; continue; };
-                        if data_hex.len()>MAX_LINE || data_hex.len()%2!=0 { event_tx.send(Output::Error{message:"frame_limit"}).await?; continue; }
+                        if data_hex.len()>MAX_LINE || !data_hex.len().is_multiple_of(2) { event_tx.send(Output::Error{message:"frame_limit"}).await?; continue; }
                         let Some(bytes)=decode_hex(&data_hex).filter(|b|b.len()<=MAX_LINE) else { event_tx.send(Output::Error{message:"invalid_frame"}).await?; continue; };
                         if tx.try_send(WsCommand::Send(bytes)).is_err() { event_tx.send(Output::Error{message:"send_queue_full"}).await?; ws_tx=None; }
                     }
@@ -106,7 +106,7 @@ async fn emit<W: AsyncWriteExt + Unpin, T: Serialize>(out: &mut W, msg: &T) -> i
     out.flush().await
 }
 fn decode_hex(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
     s.as_bytes()
@@ -132,6 +132,23 @@ fn encode_hex(b: &[u8]) -> String {
     s
 }
 
+fn configured_relay() -> Result<String, Box<dyn std::error::Error>> {
+    let value = std::env::var("OPENIDEA_COLLAB_WS_URL").unwrap_or_else(|_| RELAY.to_owned());
+    let url = Url::parse(&value)?;
+    let loopback = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
+    let production = value == RELAY;
+    if url.path() != "/v1/socket"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !(production || (loopback && url.scheme() == "ws"))
+    {
+        return Err("relay URL must be the configured Synthosia WSS endpoint (or loopback WS for local testing)".into());
+    }
+    Ok(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,21 +165,4 @@ mod tests {
         assert!(serde_json::from_str::<Input>(r#"{"op":"connect","websocket_url":"https://evil.example","credential":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","other":1}"#).is_err());
         assert!(serde_json::from_str::<Input>(r#"{"op":"connect","websocket_url":"https://collab.synthosia.com/v1/socket","credential":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}"#).is_ok());
     }
-}
-
-fn configured_relay() -> Result<String, Box<dyn std::error::Error>> {
-    let value = std::env::var("OPENIDEA_COLLAB_WS_URL").unwrap_or_else(|_| RELAY.to_owned());
-    let url = Url::parse(&value)?;
-    let loopback = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
-    let production = value == RELAY;
-    if url.path() != "/v1/socket"
-        || url.query().is_some()
-        || url.fragment().is_some()
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || !(production || (loopback && url.scheme() == "ws"))
-    {
-        return Err("relay URL must be the configured Synthosia WSS endpoint (or loopback WS for local testing)".into());
-    }
-    Ok(value)
 }

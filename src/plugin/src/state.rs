@@ -5,7 +5,14 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 const KEY: &str = "session_v1";
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SharedDocument {
+    pub path: String,
+    pub document_id: Uuid,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Session {
     pub schema: u8,
@@ -15,6 +22,8 @@ pub struct Session {
     pub member_id: Uuid,
     pub role: Role,
     pub expires_at: u64,
+    #[serde(default)]
+    pub documents: Vec<SharedDocument>,
 }
 fn root(ctx: &Invocation) -> Result<String, Error> {
     ctx.project()
@@ -27,14 +36,17 @@ pub fn load() -> Result<Option<Session>, Error> {
     };
     let session: Session = serde_json::from_str(&value)
         .map_err(|_| Error::Invalid("Invalid stored session; leave it before continuing".into()))?;
-    if session.schema != 1
+    if !matches!(session.schema, 1 | 2)
         || session.relay != DEFAULT_ORIGIN
         || session.session_id.is_nil()
         || session.member_id.is_nil()
     {
         return Err(Error::Invalid("Stored session is incompatible".into()));
     }
-    Ok(Some(session))
+    Ok(Some(Session {
+        schema: 2,
+        ..session
+    }))
 }
 pub fn for_project(ctx: &Invocation) -> Result<Option<Session>, Error> {
     let current = project_identity(&root(ctx)?);
@@ -45,13 +57,14 @@ pub fn for_project(ctx: &Invocation) -> Result<Option<Session>, Error> {
 }
 pub fn save(ctx: &Invocation, credential: SessionCredential) -> Result<(), Error> {
     let session = Session {
-        schema: 1,
+        schema: 2,
         project: project_identity(&root(ctx)?),
         relay: DEFAULT_ORIGIN.into(),
         session_id: credential.session_id,
         member_id: credential.member_id,
         role: credential.role,
         expires_at: credential.expires_at,
+        documents: Vec::new(),
     };
     let json = serde_json::to_string(&session)
         .map_err(|_| Error::Failed("Could not encode session".into()))?;
@@ -61,6 +74,11 @@ pub fn save(ctx: &Invocation, credential: SessionCredential) -> Result<(), Error
         return Err(error);
     }
     Ok(())
+}
+pub fn store(session: &Session) -> Result<(), Error> {
+    let json = serde_json::to_string(session)
+        .map_err(|_| Error::Failed("Could not encode session".into()))?;
+    host::storage::set(KEY, &json)
 }
 pub fn forget() -> Result<(), Error> {
     host::secret_delete(crate::client::SECRET)?;

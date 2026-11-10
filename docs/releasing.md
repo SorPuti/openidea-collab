@@ -1,8 +1,8 @@
 # Release process
 
-Keep marketplace publication gated while native host integration, security, real IDE tests and operator requirements in [implementation-status.md](implementation-status.md) remain unresolved. The current session-preparation build must not be advertised as a working realtime editor.
+Keep marketplace publication gated while the upstream host release, real IDE tests, security review and operator requirements in [implementation-status.md](implementation-status.md) remain unresolved. Version 0.4.0 is a development realtime build, not an approved marketplace release.
 
-Rust 1.96.0 and the workspace Cargo.lock are pinned. The current component uses SDK/CLI v0.1.40, API 1.4. New host-dependent components need an exact compatible released SDK/CLI and matching minimum API; do not claim that API 1.5 automatically includes the proposed WSS/document functions.
+Rust 1.96.0 and the workspace Cargo.lock are pinned. The component currently pins fork commit `f8d1826` implementing API 1.5 in PR #2544. Replace it with an exact official SDK/CLI release before tagging; a fork revision must not be presented as an upstream release.
 
 ```sh
 ./src/tooling/check.sh

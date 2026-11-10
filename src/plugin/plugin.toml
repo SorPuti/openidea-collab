@@ -1,17 +1,17 @@
 id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
-version = "0.3.0"
-description = "Prepare secure collaboration sessions through collab.synthosia.com. Native realtime requires new host APIs."
+version = "0.4.0"
+description = "Realtime collaboration for explicitly shared OpenIDEA documents through collab.synthosia.com."
 authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
-change-notes = "Secure relay session preparation; unsafe legacy file synchronization removed. Native realtime remains unavailable on API 1.4."
+change-notes = "Experimental project-bound WSS collaboration with explicit document sharing and versioned editor updates."
 categories = ["tools"]
-engines.openidea = "^1.4"
+engines.openidea = "^1.5"
 wasm = "dist/plugin.wasm"
-activation = ["on-command:*", "on-view:collab-panel"]
+activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready"]
 
 [capabilities]
-required = ["project.read", "storage", "secrets", "net:collab.synthosia.com"]
+required = ["project.read", "editor.read", "editor.write", "events", "storage", "secrets", "net:collab.synthosia.com"]
 
 [[contributes.secrets]]
 name = "member-credential"
@@ -36,6 +36,26 @@ category = "Collab"
 [[contributes.commands]]
 id = "leave-session"
 title = "Collab: Leave Session"
+category = "Collab"
+
+[[contributes.commands]]
+id = "connect-realtime"
+title = "Collab: Connect Realtime"
+category = "Collab"
+
+[[contributes.commands]]
+id = "disconnect-realtime"
+title = "Collab: Disconnect Realtime"
+category = "Collab"
+
+[[contributes.commands]]
+id = "share-current-document"
+title = "Collab: Share Current Document"
+category = "Collab"
+
+[[contributes.commands]]
+id = "stop-sharing-current-document"
+title = "Collab: Stop Sharing Current Document"
 category = "Collab"
 
 [[contributes.views]]

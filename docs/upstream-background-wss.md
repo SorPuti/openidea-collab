@@ -1,3 +1,5 @@
+> Historical issue draft. Issue [#2532](https://github.com/l0ng-ai/openidea/issues/2532) was opened and implementation [PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) now covers this request plus scoped document events. Keep this file as design history; do not submit it as a duplicate.
+
 ### Before you start
 
 - [x] I searched existing issues. #466 covers document/provider extension points and #922 concerns a web client architecture; I did not find a scoped background WebSocket API request for WASM plugins.
@@ -6,7 +8,7 @@
 
 A plugin cannot maintain a bidirectional relay connection through the public host APIs without installing a native helper. In v0.1.40/API 1.4 and main inspected at `c25459317bbc44a317fa203b9dc2f6074b7ab625`, `net.fetch` returns a bounded complete response, the webview is intentionally isolated from external networking, and scheduled activation has a 60-second minimum. Main's API 1.5 `net:ask` is an HTTP/HTTPS consent flow, not a WebSocket transport.
 
-The concrete use case is [OpenIDEA Collab](https://github.com/SorPuti/openidea-collab/pull/6): a bounded authenticated relay and WASM session-preparation package. Native realtime is deliberately disabled; we do not bypass CSP, launch a helper or advertise a running managed service. Native document subscriptions/transactions are a separate dependency related to #466.
+The concrete use case at the time was OpenIDEA Collab's bounded authenticated relay and WASM session-preparation package. The later implementation keeps the host primitive generic and places the Collab protocol in this repository.
 
 ### Proposed solution
 

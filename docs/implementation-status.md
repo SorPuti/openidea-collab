@@ -1,31 +1,26 @@
 # Implementation status
 
-Target domain: **collab.synthosia.com**. Source version: plugin 0.3.0 (unreleased), relay 0.2.0. The live domain responded on 2026-11-10: `/healthz` returned 204 and `/v1/info` advertised protocol 1 and the WSS endpoint. This proves public HTTP reachability only, not authenticated WSS or collaborative editing. No signed release or marketplace entry was deployed/updated by this implementation.
+Target domain: **collab.synthosia.com**. Source version: plugin 0.4.0 (unreleased), relay 0.2.0. On 2026-11-10 the live service returned `/healthz` 204, advertised protocol 1 at `/v1/info`, accepted two independently authenticated WSS clients and forwarded a registered-document binary frame between them. This is a short functional check, not a soak test or security audit. No signed release or marketplace entry was deployed by this work.
 
 | Workstream | Status |
 | --- | --- |
-| All implementation/tooling under `src/`, workspace and one lockfile | Implemented |
-| Binary bounded protocol and exact-origin invitations | Implemented |
-| HTTPS session/invitation/credential lifecycle | Implemented and tested locally |
-| Opaque WebSocket relay, roles, document IDs, revocation and bounds | Implemented and tested locally over loopback WS; live domain serves HTTPS; authenticated WebSocket upgrade still needs end-to-end validation |
-| Metadata-only recovery, no bearer/content persistence | Implemented and tested locally |
-| Yrs UTF-16 core, checkpoint integrity/project binding and chunk assembly | Implemented standalone; not connected to the native IDE editor |
-| Native plugin session preparation and keychain storage | Implemented with SDK mock tests |
-| No unsafe legacy upload/write activation | Implemented; old routes and automatic room restore removed |
-| Simple signed package installation | Packaging implemented; local official CLI validation required and recorded in validation results |
-| Native realtime transport | Experimental native companion crate builds with pinned WSS/TLS; not yet launched by plugin or validated against live authenticated service |
-| Native document realtime | Blocked on host document subscriptions; no filesystem polling/watcher and no remote writes enabled |
-| Host API integration | Contract/proposed PR cuts documented; native events relate to upstream #466 (`needs-decision`); WSS request prepared but publishing was refused with integration 403. Bounded inbox prototype implemented/tested separately; background worker, public API and official release pending |
-| Relay process memory | Local 16-connection synthetic check measured about 7.6 MiB sampled RSS; TLS/IDE/internet/soak remain untested |
-| Optimized native CRDT hot path | Pending profiling/rework of full-state staging before integration |
-| Durable client recovery/ACK and actual IDE undo | Pending host persistence/document adapters and real IDE tests |
-| Full project transfer, file operations, no-follow writes | Disabled/pending; lexical policy alone is insufficient |
-| Public admission/antiabuse and independent security audit | Pending operator policy/review |
-| Domain HTTPS and health endpoint | Observed live; authenticated WSS, abuse controls, monitoring and platform acceptance pending |
-| Marketplace re-review | Pending all applicable blockers and a new signed tag/package |
+| Source/tooling under `src/`, one workspace and lockfile | Implemented |
+| Bounded binary protocol and exact-origin invitations | Implemented and tested |
+| HTTPS session/invitation/member/document authorization | Implemented and tested locally and against the live service |
+| Opaque WSS relay, three-member rooms, revocation and bounded queues | Implemented; local integration/resource tests pass; live authenticated forwarding observed |
+| Metadata-only relay recovery; no bearer/content persistence | Implemented and tested |
+| UTF-16 Yrs core, bounded chunks, project-bound checkpoints/outbox | Implemented and tested |
+| Explicit selected-document collaboration | Implemented in the plugin; exact path filters, no scan/watcher/polling |
+| Local editor change → CRDT → host queue → WSS | Implemented; SDK integration test proves the plugin flow and upstream host tests prove bounded queue delivery |
+| WSS → CRDT → versioned editor transaction → checkpoint/ACK | Implemented and covered by the plugin integration test |
+| Initial mismatch/stale write protection | Implemented: local content is preserved, conflict surfaced, refused work retained for recovery |
+| Project/session isolation and keychain credential | Implemented and tested |
+| Host API | Implemented in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544), currently open and unreleased; plugin pins fork commit `f8d1826` |
+| Native helper/companion | No longer required by the selected architecture; prototype remains for research only |
+| Marketplace package | Blocked on upstream merge/release, then clean tag, official build/check/signing and re-review |
+| Public admission/antiabuse and independent security audit | Operator/review work remains |
+| Long-running internet/TLS soak and real multi-IDE UI evidence | Pending |
 
-The archived custom-editor/helper experiment remains preserved in its tag; it was not merged into this architecture. The original historical v0.1.0 tag remains unchanged. A new UI or relay test does not retroactively validate that package.
+The active implementation keeps the OpenIDEA contribution generic. Its WSS transport, document subscriptions, queue and mock are usable by any plugin. Relay authentication, CRDT envelopes, session limits and collaboration UI remain in this repository.
 
-Native runtime progress and integration order: [runtime-integration.md](runtime-integration.md).
-
-Detailed PR sequence, security evidence and license plan: [implementation-plan.md](implementation-plan.md).
+The original historical v0.1.0 tag remains unchanged and must not be submitted again. Release evidence must be produced from a new clean tag after the required OpenIDEA API is officially available.

@@ -2,19 +2,19 @@
 
 Run `./src/tooling/check.sh`. It validates metadata/provenance tests, formatting, Clippy with warnings denied, workspace tests and the WASM build. The relay integration suite starts its own loopback listener on an OS-selected port and tests HTTP/WebSocket access without a running external service.
 
-Package check: with the official CLI v0.1.40 available, run `./src/tooling/package-dev.sh`. This verifies the staged **control-plane package**, not native editing or a signature. Signing and marketplace installation remain separate checks.
+Package check: with an `openidea-plugin` CLI built from PR #2544 available, run `./src/tooling/package-dev.sh`. This verifies the staged development package, not a publisher signature or marketplace installation.
 
-The suites cover single-use invitations under concurrent redemption, viewer/owner roles, authenticated sender stamping, registered-document/room boundaries, revoked open sockets, oversized frames, metadata restart without credentials/content, failed metadata commits, queue overflow, malformed protocol, exact-origin invites, UTF-16/convergence, checkpoint corruption/project mismatch, chunk reordering and unsafe path policy. SDK mock tests verify that activation/save events send no files and that project changes do not reuse session access.
+The suites cover single-use invitations under concurrent redemption, viewer/owner roles, authenticated sender stamping, registered-document/room boundaries, revoked open sockets, oversized frames, metadata restart without credentials/content, failed metadata commits, queue overflow, malformed protocol, exact-origin invites, UTF-16/convergence, checkpoint corruption/project mismatch, chunk reordering and unsafe path policy. Plugin/SDK tests also prove activation sends no files, project changes cannot reuse a session, exact document filters are installed, local committed text reaches an outbound CRDT frame, and an inbound peer update reaches the versioned editor and produces an ACK.
 
 ## Required actual IDE acceptance
 
-Install the candidate in two isolated IDE profiles without Rust/CLI/helper. Confirm native UI, grants/refusal, project switching, safe credential lifecycle and no file traffic. Once the proposed host APIs are released, test concurrent native edits, nonfocused documents, Undo/Redo, Unicode/IME, reconnect/reclamation, local journal crash/disk-full handling, revocation and bounded queues. Use disposable synthetic content only.
+After PR #2544 is released, install the candidate in three isolated IDE profiles without Rust/CLI/helper. Confirm native UI, owner/editor/viewer grants, exact path isolation, project switching, safe credential lifecycle, concurrent native edits, nonfocused documents, Undo/Redo, Unicode/IME, reconnect/reclamation, checkpoint failure handling, revocation and bounded queues. Use disposable synthetic content only.
 
 Public deployment also requires actual HTTPS/WSS certificate/proxy tests, operator admission controls, resource measurements, restart and slow-peer behavior. A localhost forwarding measurement is not a measure of internet or IDE editing latency. Platform and full-IDE tests not executed must remain marked pending.
 
 ## Measured local evidence — 2026-11-10
 
-Environment: Linux execution workspace, Rust 1.96.0, unoptimized test-profile relay binary without debug symbols, one async worker, metadata persistence enabled. Synthetic payloads only. No internet, TLS proxy or real OpenIDEA editing in this measurement.
+Environment: Linux execution workspace, Rust 1.96.0, unoptimized test-profile relay binary without debug symbols, one async worker, metadata persistence enabled. Synthetic payloads only. This measurement excludes internet, TLS proxy and real OpenIDEA editing.
 
 ```sh
 cargo test --locked -p collab-server --test resource_budget -- --ignored --nocapture
@@ -32,8 +32,8 @@ It verified copying the complete synthetic invitation, clearing its fragment fro
 
 ![Invitation page after copying](assets/invitation-page.png)
 
-The official OpenIDEA CLI v0.1.40 is used by `package-dev.sh` to validate the current control-plane WASM component. It does not sign the development package or demonstrate a persistent native host socket. Browser/memory tests are opt-in and their extra tooling is not installed on collaborator machines.
+On 2026-11-10 a separate live smoke check created an owner and editor through HTTPS, registered a synthetic document, negotiated `openidea-collab.v1` over two authenticated WSS connections at `collab.synthosia.com`, forwarded one bounded binary frame and revoked the owner session. It printed no credentials or content. This proves the deployed authentication/upgrade/forwarding path at that moment, not sustained reliability.
 
-Final local validation: 29 Rust tests and 5 Python release-guard tests passed, plus the opt-in process-budget test and browser scenario. Formatting, Clippy (`-D warnings`), WASM build, shell/workflow validation and the official CLI package-folder check passed. The checked WASM component is 425.8 KiB/API 1.4. Signing, production WSS/TLS deployment, cross-platform execution and real IDE editing remain unverified.
+Final local validation on 2026-11-10: source/release guards, formatting, Clippy with warnings denied, 37 Rust tests (plus one opt-in resource test ignored), five Python release-guard tests and the optimized `wasm32-wasip2` build passed. The SDK itself passed 59 native tests and a direct WASM target check. A CLI built from OpenIDEA PR #2544 accepted both the staged folder and unsigned development package as API 1.5. The WASM is 814.8 KiB with SHA-256 `0bde26360d937009ac41cf80da4159ee598f2f85a95622a8690151e249528c1a`; `openidea-collab-0.4.0-dev.oiplugin` is 293.3 KiB with SHA-256 `4dfc80e26552294ba57a69167949a115bfb493567688b95fbd48439eadc7577f`. Signing, official-host packaging after upstream release, cross-platform execution and real multi-IDE editing remain separate evidence.
 
 Remote GitHub Actions did not execute the PR job: the check annotation reports “The job was not started because your account is locked due to a billing issue.” Local results above are independent of that account-level blocker; no remote CI success is claimed.

@@ -30,7 +30,7 @@ Authorization: Bearer <individual credential>
 Sec-WebSocket-Protocol: openidea-collab.v1
 ```
 
-Query strings and browser Origin headers are refused. Credentials do not go into URLs or WebSocket subprotocol values. No permessage-deflate is enabled. The v1 endpoint is for the future native host transport, not direct sandboxed webview networking.
+Query strings and browser Origin headers are refused. Credentials do not go into URLs or WebSocket subprotocol values. No permessage-deflate is enabled. The plugin reaches the v1 endpoint through the project-bound native host transport from OpenIDEA PR #2544, never through a sandboxed webview socket.
 
 Client binary frame, big-endian integers:
 

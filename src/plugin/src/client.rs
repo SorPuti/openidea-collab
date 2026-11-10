@@ -1,4 +1,4 @@
-//! HTTPS control plane. The released host has no persistent WebSocket API.
+//! HTTPS session, invitation and document-authorization control plane.
 use openidea_collab_protocol::{
     CreateInvite, CreateSession, DEFAULT_ORIGIN, Endpoint, Invite, RedeemInvite, Role,
     SessionCredential, VERSION, credential_valid,
@@ -89,6 +89,18 @@ pub fn invite(session: &str) -> Result<Invite, Error> {
         .parse_invitation(&invitation.url)
         .map_err(|_| Error::Invalid("Invalid invitation destination".into()))?;
     Ok(invitation)
+}
+pub fn register_document(session: &str, document_id: uuid::Uuid) -> Result<(), Error> {
+    request(
+        "POST",
+        &format!("/v1/sessions/{session}/documents"),
+        Some(
+            serde_json::to_vec(&openidea_collab_protocol::RegisterDocument { document_id })
+                .map_err(|_| Error::Invalid("Could not encode document registration".into()))?,
+        ),
+        true,
+    )
+    .map(drop)
 }
 pub fn leave(session: &str, member: &str) -> Result<(), Error> {
     request(
