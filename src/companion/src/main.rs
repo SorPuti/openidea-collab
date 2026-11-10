@@ -10,6 +10,7 @@ use tokio_tungstenite::{
     connect_async,
     tungstenite::{Message, client::IntoClientRequest},
 };
+use url::Url;
 
 const RELAY: &str = "wss://collab.synthosia.com/v1/socket";
 const SUBPROTOCOL: &str = "openidea-collab.v1";
@@ -42,6 +43,7 @@ enum WsCommand {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let relay = configured_relay()?;
     let mut input = BufReader::new(tokio::io::stdin()).lines();
     let mut stdout = tokio::io::stdout();
     let (event_tx, mut events) = mpsc::channel::<Output>(32);
@@ -54,10 +56,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let cmd: Input = match serde_json::from_str(&line) { Ok(v)=>v, Err(_)=> { event_tx.send(Output::Error{message:"invalid_command"}).await?; continue; }};
                 match cmd {
                     Input::Connect { websocket_url, credential } => {
-                        if ws_tx.is_some() || websocket_url != RELAY || credential.len() < 32 {
+                        if ws_tx.is_some() || websocket_url != relay || credential.len() < 32 {
                             event_tx.send(Output::Error{message:"invalid_connection_request"}).await?; continue;
                         }
-                        let mut req = RELAY.into_client_request()?;
+                        let mut req = websocket_url.as_str().into_client_request()?;
                         req.headers_mut().insert("authorization", format!("Bearer {credential}").parse()?);
                         req.headers_mut().insert("sec-websocket-protocol", SUBPROTOCOL.parse()?);
                         // Do not retain credentials or include them in error output.
@@ -146,4 +148,21 @@ mod tests {
         assert!(serde_json::from_str::<Input>(r#"{"op":"connect","websocket_url":"https://evil.example","credential":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx","other":1}"#).is_err());
         assert!(serde_json::from_str::<Input>(r#"{"op":"connect","websocket_url":"https://collab.synthosia.com/v1/socket","credential":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}"#).is_ok());
     }
+}
+
+fn configured_relay() -> Result<String, Box<dyn std::error::Error>> {
+    let value = std::env::var("OPENIDEA_COLLAB_WS_URL").unwrap_or_else(|_| RELAY.to_owned());
+    let url = Url::parse(&value)?;
+    let loopback = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
+    let production = value == RELAY;
+    if url.path() != "/v1/socket"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !(production || (loopback && url.scheme() == "ws"))
+    {
+        return Err("relay URL must be the configured Synthosia WSS endpoint (or loopback WS for local testing)".into());
+    }
+    Ok(value)
 }
