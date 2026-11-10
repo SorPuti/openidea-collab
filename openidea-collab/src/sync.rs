@@ -224,8 +224,14 @@ impl SyncState {
                 Some(gh) => format!("  @{gh} :{}", col + 1),
                 None => format!("  {} :{}", peer.name, col + 1),
             };
-            let pos = openidea_plugin::Position { line, character: col };
-            let range = Range { start: pos, end: pos };
+            let pos = openidea_plugin::Position {
+                line,
+                character: col,
+            };
+            let range = Range {
+                start: pos,
+                end: pos,
+            };
             let deco = Decoration {
                 range,
                 style: "collab-cursor".to_owned(),
@@ -252,7 +258,11 @@ impl SyncState {
             }
         }
         for (path, count) in counts {
-            let badge = if count == 1 { "●".to_owned() } else { format!("{count}●") };
+            let badge = if count == 1 {
+                "●".to_owned()
+            } else {
+                format!("{count}●")
+            };
             let deco = FileDecoration {
                 badge: Some(badge),
                 style: "collab-open".to_owned(),
@@ -269,7 +279,11 @@ impl SyncState {
             return;
         }
         let peer_count = self.presence.peer_count();
-        let icon = if self.sync_active { "$(sync~spin)" } else { "$(plug)" };
+        let icon = if self.sync_active {
+            "$(sync~spin)"
+        } else {
+            "$(plug)"
+        };
         let text = if peer_count == 0 {
             format!("{icon} {room_id}")
         } else {
@@ -293,12 +307,9 @@ impl SyncState {
             .as_ref()
             .map(|r| r.server_url.as_str())
             .unwrap_or(crate::DEFAULT_SERVER_URL);
-        let payload = self.presence.build_panel_json(
-            room_id,
-            self.sync_active,
-            server_url,
-            crate::IS_DEV,
-        );
+        let payload =
+            self.presence
+                .build_panel_json(room_id, self.sync_active, server_url, crate::IS_DEV);
         if let Ok(msg) = serde_json::to_string(&payload) {
             let _ = host::post_view_message(VIEW_COLLAB_PANEL, &msg);
         }

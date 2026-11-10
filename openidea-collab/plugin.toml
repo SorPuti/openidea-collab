@@ -11,7 +11,7 @@ wasm = "dist/plugin.wasm"
 activation = ["on-event:file-saved", "on-event:editor-focused", "on-command:*", "on-schedule:60"]
 
 [capabilities]
-required = ["project.read", "project.write", "events", "storage", "editor.read"]
+required = ["project.read", "project.write", "events", "storage", "editor.read", "net:localhost", "net:127.0.0.1"]
 
 [[contributes.commands]]
 id = "create-room"

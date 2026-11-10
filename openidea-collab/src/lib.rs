@@ -5,14 +5,13 @@ pub mod presence;
 pub mod room;
 pub mod sync;
 
+use client::CollabClient;
 use openidea_plugin::{
-    host, register_plugin, Context, Error, Event, EventKind, Invocation,
-    NotificationLevel, Plugin,
+    Context, Error, Event, EventKind, Invocation, NotificationLevel, Plugin, host, register_plugin,
     views::{Body, Button, View, ViewEvent, Viewport, Views},
 };
-use client::CollabClient;
-use sync::SyncState;
 use room::RoomState;
+use sync::SyncState;
 
 const DEFAULT_SERVER_URL: &str = "http://localhost:4444";
 const STORAGE_KEY_SERVER: &str = "server_url";
@@ -462,7 +461,12 @@ if (!setupListener()) {
 
 // ── git identity helpers ──────────────────────────────────────────────────────
 
-fn git_config_value(text: &str, section: &str, subsection: Option<&str>, key: &str) -> Option<String> {
+fn git_config_value(
+    text: &str,
+    section: &str,
+    subsection: Option<&str>,
+    key: &str,
+) -> Option<String> {
     let header = match subsection {
         Some(sub) => format!("[{} \"{}\"]", section, sub),
         None => format!("[{}]", section),
@@ -494,7 +498,9 @@ fn git_config_github(text: &str) -> Option<String> {
         return None;
     };
     let username = rest.split('/').next()?;
-    if username.is_empty() { return None; }
+    if username.is_empty() {
+        return None;
+    }
     Some(username.to_owned())
 }
 
@@ -537,16 +543,22 @@ impl CollabPlugin {
     }
 
     fn panel_send_state(&self) {
-        let room_id = self.sync.room.as_ref().map(|r| r.room_id.as_str()).unwrap_or("");
-        let server_url = self.sync.room.as_ref()
+        let room_id = self
+            .sync
+            .room
+            .as_ref()
+            .map(|r| r.room_id.as_str())
+            .unwrap_or("");
+        let server_url = self
+            .sync
+            .room
+            .as_ref()
             .map(|r| r.server_url.as_str())
             .unwrap_or(DEFAULT_SERVER_URL);
-        let payload = self.sync.presence.build_panel_json(
-            room_id,
-            self.sync.sync_active,
-            server_url,
-            IS_DEV,
-        );
+        let payload =
+            self.sync
+                .presence
+                .build_panel_json(room_id, self.sync.sync_active, server_url, IS_DEV);
         if let Ok(msg) = serde_json::to_string(&payload) {
             let _ = host::post_view_message(VIEW_COLLAB_PANEL, &msg);
         }
@@ -562,11 +574,17 @@ impl CollabPlugin {
 
         let room_id = match self.client.create_room() {
             Ok(id) => id,
-            Err(e) => { self.send_panel_error(&format!("Erro ao criar sala: {e}")); return; }
+            Err(e) => {
+                self.send_panel_error(&format!("Erro ao criar sala: {e}"));
+                return;
+            }
         };
         let user_id = match self.client.join_room(&room_id, &name) {
             Ok(id) => id,
-            Err(e) => { self.send_panel_error(&format!("Erro ao entrar na sala: {e}")); return; }
+            Err(e) => {
+                self.send_panel_error(&format!("Erro ao entrar na sala: {e}"));
+                return;
+            }
         };
         let server_url = self.client.server_url.clone();
         let room = RoomState {
@@ -582,7 +600,11 @@ impl CollabPlugin {
         self.sync.presence = pstate;
         self.sync.save_to_storage();
         self.sync.update_status_bar(&room_id);
-        host::notify(NotificationLevel::Info, "Collab", &format!("Sala criada: {room_id}"));
+        host::notify(
+            NotificationLevel::Info,
+            "Collab",
+            &format!("Sala criada: {room_id}"),
+        );
         self.panel_send_state();
     }
 
@@ -594,7 +616,10 @@ impl CollabPlugin {
 
         let user_id = match self.client.join_room(&room_id, &name) {
             Ok(id) => id,
-            Err(e) => { self.send_panel_error(&format!("Erro ao entrar na sala: {e}")); return; }
+            Err(e) => {
+                self.send_panel_error(&format!("Erro ao entrar na sala: {e}"));
+                return;
+            }
         };
         let server_url = self.client.server_url.clone();
         let room = RoomState {
@@ -614,14 +639,23 @@ impl CollabPlugin {
             for m in members {
                 if m.user_id != user_id {
                     self.sync.presence.update_peer(
-                        m.user_id, m.name, m.current_file, m.github, m.line, m.col,
+                        m.user_id,
+                        m.name,
+                        m.current_file,
+                        m.github,
+                        m.line,
+                        m.col,
                     );
                 }
             }
         }
         self.sync.update_status_bar(&room_id);
         self.sync.apply_file_badges();
-        host::notify(NotificationLevel::Info, "Collab", &format!("Entrou na sala {room_id}"));
+        host::notify(
+            NotificationLevel::Info,
+            "Collab",
+            &format!("Entrou na sala {room_id}"),
+        );
         self.panel_send_state();
     }
 
@@ -671,20 +705,24 @@ impl Plugin for CollabPlugin {
         match id {
             "set-server" => {
                 let current = self.client.server_url.clone();
-                let url = host::input("Server URL", Some(&current))?
-                    .unwrap_or(current);
+                let url = host::input("Server URL", Some(&current))?.unwrap_or(current);
                 let url = url.trim().trim_end_matches('/').to_owned();
                 let _ = host::storage::set(STORAGE_KEY_SERVER, &url);
                 self.client = CollabClient::new(url.clone());
-                host::notify(NotificationLevel::Info, "Collab", &format!("Servidor: {url}"));
+                host::notify(
+                    NotificationLevel::Info,
+                    "Collab",
+                    &format!("Servidor: {url}"),
+                );
                 host::refresh_view(VIEW_COLLAB_PANEL);
                 Ok(None)
             }
             "create-room" => {
-                let room_id =
-                    self.client.create_room().map_err(|e| Error::Failed(e.to_string()))?;
-                let name = host::input("Seu nome", None)?
-                    .unwrap_or_else(|| "Anonymous".to_owned());
+                let room_id = self
+                    .client
+                    .create_room()
+                    .map_err(|e| Error::Failed(e.to_string()))?;
+                let name = host::input("Seu nome", None)?.unwrap_or_else(|| "Anonymous".to_owned());
                 let github = host::input("GitHub username (opcional)", None)?
                     .filter(|s| !s.trim().is_empty());
                 let user_id = self
@@ -705,7 +743,11 @@ impl Plugin for CollabPlugin {
                 self.sync.presence = pstate;
                 self.sync.save_to_storage();
                 self.sync.update_status_bar(&room_id);
-                host::notify(NotificationLevel::Info, "Collab", &format!("Sala criada: {room_id}"));
+                host::notify(
+                    NotificationLevel::Info,
+                    "Collab",
+                    &format!("Sala criada: {room_id}"),
+                );
                 self.sync.push_panel_state(&room_id);
                 Ok(Some(room_id))
             }
@@ -714,8 +756,7 @@ impl Plugin for CollabPlugin {
                     Some(r) if !r.trim().is_empty() => r.trim().to_owned(),
                     _ => return Err(Error::Cancelled),
                 };
-                let name = host::input("Seu nome", None)?
-                    .unwrap_or_else(|| "Anonymous".to_owned());
+                let name = host::input("Seu nome", None)?.unwrap_or_else(|| "Anonymous".to_owned());
                 let github = host::input("GitHub username (opcional)", None)?
                     .filter(|s| !s.trim().is_empty());
                 let user_id = self
@@ -740,14 +781,23 @@ impl Plugin for CollabPlugin {
                     for m in members {
                         if m.user_id != user_id {
                             self.sync.presence.update_peer(
-                                m.user_id, m.name, m.current_file, m.github, m.line, m.col,
+                                m.user_id,
+                                m.name,
+                                m.current_file,
+                                m.github,
+                                m.line,
+                                m.col,
                             );
                         }
                     }
                 }
                 self.sync.update_status_bar(&room_id);
                 self.sync.apply_file_badges();
-                host::notify(NotificationLevel::Info, "Collab", &format!("Entrou na sala {room_id}"));
+                host::notify(
+                    NotificationLevel::Info,
+                    "Collab",
+                    &format!("Entrou na sala {room_id}"),
+                );
                 self.sync.push_panel_state(&room_id);
                 Ok(None)
             }
@@ -769,7 +819,8 @@ impl Plugin for CollabPlugin {
                 }
                 Event::EditorFocused(maybe_path) => {
                     if let Some(ref room) = self.sync.room.clone() {
-                        let (line, col) = ctx.editor()
+                        let (line, col) = ctx
+                            .editor()
                             .and_then(|e| e.selections().ok())
                             .and_then(|sels| sels.into_iter().next())
                             .map(|r| (r.start.line, r.start.character))
@@ -813,15 +864,29 @@ impl Views for CollabPlugin {
             .unwrap_or_else(|| DEFAULT_SERVER_URL.to_owned());
 
         // Prefer stored profile, fall back to git identity
-        let stored_name = host::storage::get(STORAGE_KEY_USER_NAME).ok().flatten().unwrap_or_default();
-        let stored_github = host::storage::get(STORAGE_KEY_USER_GITHUB).ok().flatten().unwrap_or_default();
+        let stored_name = host::storage::get(STORAGE_KEY_USER_NAME)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let stored_github = host::storage::get(STORAGE_KEY_USER_GITHUB)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
         let (git_name, git_github) = if stored_name.is_empty() || stored_github.is_empty() {
             detect_git_identity(ctx)
         } else {
             (String::new(), String::new())
         };
-        let init_name   = if stored_name.is_empty()   { git_name }   else { stored_name };
-        let init_github = if stored_github.is_empty() { git_github } else { stored_github };
+        let init_name = if stored_name.is_empty() {
+            git_name
+        } else {
+            stored_name
+        };
+        let init_github = if stored_github.is_empty() {
+            git_github
+        } else {
+            stored_github
+        };
 
         let html = PANEL_HTML
             .replace("__SERVER_URL__", &server_url)
@@ -833,8 +898,7 @@ impl Views for CollabPlugin {
         let view = if self.sync.room.is_some() {
             view.button(Button::new("leave-room", "Leave Room").icon("close"))
         } else {
-            view
-                .button(Button::new("create-room", "Create Room").icon("add"))
+            view.button(Button::new("create-room", "Create Room").icon("add"))
                 .button(Button::new("join-room", "Join Room").icon("arrow-right"))
         };
         Ok(view)
@@ -851,12 +915,16 @@ impl Views for CollabPlugin {
                     "create-room" => {
                         // Toolbar button: use stored name or prompt via run_command
                         let name = host::storage::get(STORAGE_KEY_USER_NAME)
-                            .ok().flatten().unwrap_or_default();
+                            .ok()
+                            .flatten()
+                            .unwrap_or_default();
                         if name.is_empty() {
                             let _ = self.run_command("create-room", ctx, None);
                         } else {
                             let github = host::storage::get(STORAGE_KEY_USER_GITHUB)
-                                .ok().flatten().filter(|s| !s.is_empty());
+                                .ok()
+                                .flatten()
+                                .filter(|s| !s.is_empty());
                             self.panel_create_room(name, github);
                         }
                     }
@@ -874,16 +942,25 @@ impl Views for CollabPlugin {
                 match msg.get("type").and_then(|t| t.as_str()) {
                     Some("create-room") => {
                         let name = msg["name"].as_str().unwrap_or("Anonymous").to_owned();
-                        let github = msg["github"].as_str().filter(|s| !s.is_empty()).map(str::to_owned);
+                        let github = msg["github"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_owned);
                         self.panel_create_room(name, github);
                     }
                     Some("join-room") => {
                         let room_id = match msg["room_id"].as_str() {
                             Some(r) if !r.trim().is_empty() => r.trim().to_owned(),
-                            _ => { self.send_panel_error("Room ID inválido"); return Ok(()); }
+                            _ => {
+                                self.send_panel_error("Room ID inválido");
+                                return Ok(());
+                            }
                         };
                         let name = msg["name"].as_str().unwrap_or("Anonymous").to_owned();
-                        let github = msg["github"].as_str().filter(|s| !s.is_empty()).map(str::to_owned);
+                        let github = msg["github"]
+                            .as_str()
+                            .filter(|s| !s.is_empty())
+                            .map(str::to_owned);
                         self.panel_join_room(room_id, name, github);
                     }
                     Some("leave-room") => {
@@ -891,12 +968,21 @@ impl Views for CollabPlugin {
                     }
                     Some("set-server") => {
                         let url = match msg["url"].as_str() {
-                            Some(u) if !u.trim().is_empty() => u.trim().trim_end_matches('/').to_owned(),
-                            _ => { self.send_panel_error("URL inválida"); return Ok(()); }
+                            Some(u) if !u.trim().is_empty() => {
+                                u.trim().trim_end_matches('/').to_owned()
+                            }
+                            _ => {
+                                self.send_panel_error("URL inválida");
+                                return Ok(());
+                            }
                         };
                         let _ = host::storage::set(STORAGE_KEY_SERVER, &url);
                         self.client = CollabClient::new(url.clone());
-                        host::notify(NotificationLevel::Info, "Collab", &format!("Servidor: {url}"));
+                        host::notify(
+                            NotificationLevel::Info,
+                            "Collab",
+                            &format!("Servidor: {url}"),
+                        );
                         // Notify panel the URL was saved
                         let ack = serde_json::json!({ "type": "server-saved", "url": url });
                         if let Ok(s) = serde_json::to_string(&ack) {
