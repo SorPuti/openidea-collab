@@ -1,6 +1,6 @@
 # OpenIDEA host integration
 
-The required generic host support is implemented in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) and tracked by [issue #2532](https://github.com/l0ng-ai/openidea/issues/2532). The PR is open and unreleased. This plugin therefore pins the contributor fork commit `f8d1826139bef93d4526512bf7bc087b7d374e85`; that pin is suitable for development validation, not a marketplace release.
+The generic WSS transport is implemented in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544), while document subscriptions are separated on the stacked [`feat/plugin-document-subscriptions`](https://github.com/SorPuti/openidea/tree/feat/plugin-document-subscriptions) branch; both follow [issue #2532](https://github.com/l0ng-ai/openidea/issues/2532). They are open and unreleased. This plugin therefore pins the contributor fork commit `288b7b4417daf0cb7442adce1f477c90ca41a863`; that pin is suitable for development validation, not a marketplace release.
 
 ## Public surface
 

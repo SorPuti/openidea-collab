@@ -1,6 +1,6 @@
 # Native runtime integration
 
-The native design is implemented across two repositories. [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) provides a generic API 1.5 host capability; this repository consumes it for collaboration. The API remains unreleased, so the plugin pins fork commit `f8d1826139bef93d4526512bf7bc087b7d374e85` and is a development build until maintainers merge and release the host change.
+The native design is implemented across two repositories. [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) provides the generic API 1.5 WSS transport; the stacked [`feat/plugin-document-subscriptions`](https://github.com/SorPuti/openidea/tree/feat/plugin-document-subscriptions) branch adds explicit document subscriptions. This repository consumes both for collaboration. The API remains unreleased, so the plugin pins stacked fork commit `288b7b4417daf0cb7442adce1f477c90ca41a863` and is a development build until maintainers merge and release the host changes.
 
 ## Generic OpenIDEA layer
 

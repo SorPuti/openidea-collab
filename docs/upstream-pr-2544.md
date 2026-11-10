@@ -1,26 +1,36 @@
-Closes #2532.
+Relates to #2532.
 
 ## What and why
 
-WASM plugins that consume realtime services currently have no bounded background transport, and document integrations cannot observe or apply explicit versioned changes outside a synchronous command. This adds a generic API 1.5 host surface for project-bound WSS connections and explicitly scoped open-document streams.
+Wasm plugins that consume realtime services currently have no bounded background transport. This adds a generic API 1.5 host surface for project-bound WebSocket connections, without document or collaboration semantics.
 
-The host owns the socket and bounded queues, expands declared keychain secrets in the Authorization header, requires WSS outside loopback and a negotiated subprotocol, coalesces readiness events, and closes on overflow instead of reporting a refused frame as delivered. Connection handles cannot cross project boundaries and are cleaned up with the plugin/transport lifecycle.
+The host owns the socket and separate bounded incoming/outgoing queues. It requires the endpoint's `net:<host>` capability, expands declared keychain secrets only in the `Authorization` header, requires WSS outside loopback and a negotiated subprotocol, and emits `websocket-ready` instead of requiring polling. Connection handles cannot cross plugin or project boundaries and are cleaned up on close, transport failure, plugin stop, or after an abandoned final drain.
 
-Plugins can subscribe to exact project-relative document paths, receive committed UTF-16 changes, read a versioned open document and apply expected-version edits. Shared-document resolution rejects symlinks, IDE/VCS control paths, hooks and common secret files on access and apply. No filesystem polling or arbitrary project write API is added.
+Queue overflow explicitly rejects the new frame and closes the connection. It never reports a refused frame as accepted and never grows retained memory without a bound. The Rust SDK and `MockHost` expose the same connect/send/drain/close lifecycle for downstream tests.
 
-The Rust SDK and `MockHost` expose the same behavior. The mock records connections/outbound frames, queues inbound frames, models close/drain and enforces network, secret and project grants so downstream plugins can test the real public wrappers.
+Document subscriptions are intentionally excluded from this PR and live on the stacked [`SorPuti:feat/plugin-document-subscriptions`](https://github.com/SorPuti/openidea/tree/feat/plugin-document-subscriptions) branch.
 
-## How it was verified
+## Validation
 
-- `cargo test -p ide-host document_stream --lib` — 6 passed
-- bounded inbox suite — 8 passed, including count/byte overflow, explicit refusal, partial drain, close and budget recovery
+Passed:
+
+- `cargo test -p ide-plugin --lib` — 25 passed
+- `cargo test -p ide-host --lib` — 347 passed
+- `cargo test -p ide-host --lib plugins::network_inbox::tests` — 8 passed
+- `cargo test -p ide-host --lib plugins::websocket::tests` — 4 passed
 - `cargo test --manifest-path sdk/rust/openidea-plugin/Cargo.toml` — 59 passed
-- `cargo clippy --manifest-path sdk/rust/openidea-plugin/Cargo.toml --all-targets -- -D warnings`
-- `cargo check --manifest-path sdk/rust/openidea-plugin/Cargo.toml --target wasm32-wasip2`
-- a downstream WASM plugin using this API built successfully and passed `openidea-plugin check` as API 1.5
+- `cargo clippy -p ide-host -p ide-plugin --all-targets --no-deps -- -D warnings -A clippy::nonminimal-bool` — passed; the single allowed lint is already present in untouched `main` files under Rust 1.96
+- `cargo fmt --all --check`
+- `pnpm test` — 798 files and 9,741 tests passed; 6 skipped
 
-There are no user-visible UI changes. The API is generic; relay authentication models, collaboration protocols and CRDT behavior remain downstream concerns.
+Also executed:
+
+- `cargo test -p ide-host -p ide-plugin` — both packages compiled; this 4.9 GiB runner exhausted `/dev/shm` while linking all `ide-host` integration binaries concurrently, so the package library suites above were run sequentially
+- `cargo clippy -p ide-host -p ide-plugin --all-targets -- -D warnings` — reached only pre-existing `clippy::nonminimal-bool` diagnostics in untouched `main` files; the scoped command above passed
+- `pnpm gen:bindings` — this runner lacks the GTK/WebKit system development packages required to compile the Tauri export test; the checked-in bindings match the split Rust types and the normal CI environment should regenerate/verify them
+
+There are no user-visible UI changes. Relay authentication models, collaboration protocols, document ownership, and CRDT behavior remain downstream concerns.
 
 ## Review focus
 
-Please review the project/permission boundaries, refusal and cleanup semantics, WIT compatibility, exact document scope and the SDK/host parity.
+Please review the capability and project boundaries, bounded queue/refusal contract, readiness and close lifecycle, WIT compatibility, and SDK/host parity. The new `tokio-tungstenite` runtime dependency remains subject to maintainer approval.
