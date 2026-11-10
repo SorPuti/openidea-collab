@@ -29,3 +29,11 @@ Each PR belongs in `l0ng-ai/openidea` with WIT, SDK/mock, host/runtime, grants, 
 The plugin core translates native changes to bounded Yrs updates, stores a checkpoint before advertising local durability, sends binary frames through the host, and applies authenticated peer updates to the correct versioned document. A peer ACK is emitted only after the receiving checkpoint is committed at the advertised level. The relay only routes; it cannot issue that ACK on the peer's behalf.
 
 The current CRDT staging implementation must be profiled before it enters the keystroke path. Chunk assembly and queues are bounded, but full-state staging is not an optimized native adapter. Optimizations must preserve refusal/no-loss behavior with regression coverage.
+
+## Upstream tracking
+
+Existing [issue #466](https://github.com/l0ng-ai/openidea/issues/466) includes native document event/provider extension points and was labeled `needs-decision` when checked on 2026-11-10. Do not open a duplicate general document-events request.
+
+The separate [background WSS feature request](upstream-background-wss.md) is prepared and reviewed against the upstream feature form. Publication was attempted through both the CLI and the connected GitHub API on 2026-11-10; both refused with **403 / Resource not accessible by integration**. No WSS issue was created. An account/integration permitted to open that issue is needed to submit the prepared request.
+
+Upstream CONTRIBUTING.md says a feature is ready to build once a maintainer labels it `planned`. The prepared WIT is a contract sketch, not a runtime implementation or an official released API. Runtime work and official compatibility remain pending that process.

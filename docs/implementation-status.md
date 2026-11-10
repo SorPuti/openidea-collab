@@ -14,7 +14,7 @@ Target domain: **collab.synthosia.com**. Source version: plugin 0.3.0 (unrelease
 | No unsafe legacy upload/write activation | Implemented; old routes and automatic room restore removed |
 | Simple signed package installation | Packaging implemented; local official CLI validation required and recorded in validation results |
 | Native realtime without helper | Blocked on public host APIs; not claimed by this package |
-| Host API integration | Contract/proposed PR cuts documented; no runtime patch or official release yet |
+| Host API integration | Contract/proposed PR cuts documented; native events relate to upstream #466 (`needs-decision`); WSS request prepared but publishing was refused with integration 403. No runtime patch or official release yet |
 | Relay process memory | Local 16-connection synthetic check measured about 7.6 MiB sampled RSS; TLS/IDE/internet/soak remain untested |
 | Optimized native CRDT hot path | Pending profiling/rework of full-state staging before integration |
 | Durable client recovery/ACK and actual IDE undo | Pending host persistence/document adapters and real IDE tests |

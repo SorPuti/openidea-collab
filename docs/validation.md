@@ -35,3 +35,5 @@ It verified copying the complete synthetic invitation, clearing its fragment fro
 The official OpenIDEA CLI v0.1.40 is used by `package-dev.sh` to validate the current control-plane WASM component. It does not sign the development package or demonstrate a persistent native host socket. Browser/memory tests are opt-in and their extra tooling is not installed on collaborator machines.
 
 Final local validation: 29 Rust tests and 5 Python release-guard tests passed, plus the opt-in process-budget test and browser scenario. Formatting, Clippy (`-D warnings`), WASM build, shell/workflow validation and the official CLI package-folder check passed. The checked WASM component is 425.8 KiB/API 1.4. Signing, production WSS/TLS deployment, cross-platform execution and real IDE editing remain unverified.
+
+Remote GitHub Actions did not execute the PR job: the check annotation reports “The job was not started because your account is locked due to a billing issue.” Local results above are independent of that account-level blocker; no remote CI success is claimed.
