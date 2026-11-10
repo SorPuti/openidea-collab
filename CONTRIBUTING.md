@@ -1,24 +1,15 @@
 # Contributing
 
-The project is under active security remediation. Keep fixes small and identify which marketplace review requirement they address. Do not use real credentials or private project files in examples or tests.
-
-## Setup and checks
-
-Install the Rust version in `rust-toolchain.toml`. The plugin pins the OpenIDEA SDK to `v0.1.40`; use the CLI from that same tag (its build requires Rust 1.96.0; see the README). Keep both Cargo lockfiles committed.
+Product implementation and tooling belong in `src/`. Documentation belongs in `docs/`, deployment configuration in `deploy/`, and repository policy/automation in root or `.github/`. Each Rust component has its tests beside its source and uses the root workspace/lockfile.
 
 ```sh
-./scripts/check.sh
+./src/tooling/check.sh
 ```
 
-This checks formatting, Clippy, server HTTP tests, plugin mock tests and the WASM build. For CLI/package validation, follow [docs/releasing.md](docs/releasing.md). For the IDE lifecycle and two-client exercise, follow [docs/validation.md](docs/validation.md); mock tests do not establish actual IDE delivery.
+Rust 1.96.0 is pinned. Developers need the toolchain; package users do not. Use one build job on constrained machines (`CARGO_BUILD_JOBS=1`). The official CLI v0.1.40 is used to check the current API 1.4 control-plane package; future host-dependent builds need the exact matching released SDK and CLI.
 
-## Changes
+Keep one problem per PR. Use Conventional Commit titles and describe the behavior, verification commands/results and residual limitations. Add meaningful regression tests for authorization, resource limits, project isolation and preservation of edits. No test or README should claim native realtime from a mocked session request.
 
-- Use branches such as `fix/server-routing` or `docs/security-model`.
-- Use commit subjects such as `fix: preserve refused updates` or `docs: explain uploaded data`.
-- Describe the problem, resulting behavior, checks run and remaining limitations in each PR.
-- Add regression coverage for protocol, security and data preservation changes. Avoid tests that only repeat implementation details.
-- Run `cargo fmt` with each component's manifest when changing Rust.
-- Update documentation and `CHANGELOG.md` when behavior changes. Version the plugin and server independently; plugin Cargo and manifest versions must agree.
+Source changes to the OpenIDEA public API belong upstream with WIT, SDK, runtime, grants, compatibility tests and IDE verification. The integration proposal lives in [docs/host-api.md](docs/host-api.md); configuration does not create a missing API.
 
-Security reports: see [SECURITY.md](SECURITY.md). Release policy: see [docs/releasing.md](docs/releasing.md).
+Do not expose unreviewed code as a public service or submit a new marketplace version until [implementation-status.md](docs/implementation-status.md) release blockers are resolved. Follow [SECURITY.md](SECURITY.md) for vulnerability reports and [releasing.md](docs/releasing.md) for provenance.

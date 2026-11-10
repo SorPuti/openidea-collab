@@ -1,0 +1,20 @@
+[package]
+name = "openidea-plugin-openidea-collab"
+version = "0.3.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+# Built by the repository workspace; distribution contains a single WASM component.
+
+[lib]
+name = "openidea_collab"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+openidea-plugin = { git = "https://github.com/l0ng-ai/openidea", tag = "v0.1.40" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+openidea-collab-protocol = { path = "../protocol" }
+openidea-collab-core = { path = "../core" }
+uuid = { version = "1", features = ["serde"] }

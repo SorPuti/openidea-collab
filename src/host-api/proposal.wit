@@ -1,0 +1,45 @@
+// Proposal only. This package is not imported by the current plugin and does
+// not claim that these APIs exist in OpenIDEA. Upstream decides the API names,
+// capabilities, version and compatibility-preserving integration.
+package sorputi:collab-host-proposal@0.1.0;
+
+interface background-network {
+    record header { name: string, value: string }
+    record connection-options { project: u64, endpoint: string, headers: list<header>, subprotocol: string }
+    record packet { connection: u64, bytes: list<u8> }
+    // Host-owned subscriptions survive instance reclamation; IDs are scoped to
+    // plugin/project and cannot be used after revocation or project closure.
+    connect: func(options: connection-options) -> result<u64, string>;
+    // Enqueues without waiting for the network; bounded by host policy.
+    send: func(connection: u64, bytes: list<u8>) -> result<_, string>;
+    // Called after a coalesced ready event. Does not wait for future packets.
+    drain: func(connection: u64, max-bytes: u32) -> result<list<packet>, string>;
+    close: func(connection: u64);
+}
+
+interface documents {
+    record change { %from: u32, to: u32, insert: string }
+    record snapshot { id: u64, version: u64, text: string, read-only: bool }
+    record transaction { id: u64, expected-version: u64, changes: list<change>, origin: string, remote: bool }
+    // UTF-16 offsets. Only explicitly selected project documents may be opened.
+    open: func(project: u64, relative-path: string) -> result<snapshot, string>;
+    subscribe: func(document: u64) -> result<_, string>;
+    apply: func(edit: transaction) -> result<u64, string>;
+    unsubscribe: func(document: u64);
+}
+
+interface checkpoints {
+    // Data stays in the plugin's private namespace, bound to the project.
+    // Success must report the actual platform durability rather than silently
+    // equating rename with power-loss durability.
+    record committed { generation: u64, durability: string }
+    commit: func(project: u64, key: string, expected-generation: u64, data: list<u8>) -> result<committed, string>;
+    recover: func(project: u64, key: string) -> result<option<list<u8>>, string>;
+}
+
+interface shared-files {
+    // The host enforces no-follow on every component under an explicit grant.
+    // This must not be implemented as a check-then-open race in plugin code.
+    read: func(project: u64, relative-path: string) -> result<list<u8>, string>;
+    replace: func(project: u64, relative-path: string, expected-digest: list<u8>, data: list<u8>) -> result<_, string>;
+}

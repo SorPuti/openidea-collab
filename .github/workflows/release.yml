@@ -6,6 +6,8 @@ permissions:
   contents: read
 jobs:
   validate:
+    if: github.event.repository.private == false
+    timeout-minutes: 30
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -15,12 +17,12 @@ jobs:
       - name: Verify tag and source
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 scripts/verify-release.py --tag "$RELEASE_TAG"
-      - run: ./scripts/check.sh
+        run: python3 src/tooling/verify-release.py --tag "$RELEASE_TAG"
+      - run: ./src/tooling/check.sh
 
   server:
     needs: validate
-    if: vars.COLLAB_RELEASE_READY == 'true'
+    if: github.event.repository.private == false && vars.COLLAB_RELEASE_READY == 'true'
     name: server ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -43,11 +45,11 @@ jobs:
           BUILD_NAME: ${{ matrix.name }}
         run: |
           if [ "$BUILD_NAME" = linux-aarch64 ]; then
-            cross build --locked --release --manifest-path collab-server/Cargo.toml --target "$BUILD_TARGET"
+            cross build --locked --release -p collab-server --target "$BUILD_TARGET"
           else
-            cargo build --locked --release --manifest-path collab-server/Cargo.toml --target "$BUILD_TARGET"
+            cargo build --locked --release -p collab-server --target "$BUILD_TARGET"
           fi
-          cp "collab-server/target/$BUILD_TARGET/release/collab-server" "collab-server-$BUILD_NAME"
+          cp "target/$BUILD_TARGET/release/collab-server" "collab-server-$BUILD_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: collab-server-${{ matrix.name }}
@@ -56,7 +58,7 @@ jobs:
   # Enable only after the security/reliability review and manual IDE validation.
   package:
     needs: [validate, server]
-    if: vars.COLLAB_RELEASE_READY == 'true'
+    if: github.event.repository.private == false && vars.COLLAB_RELEASE_READY == 'true'
     environment: release
     runs-on: ubuntu-24.04
     permissions:
@@ -83,7 +85,7 @@ jobs:
           printf '%s' "$OPENIDEA_KEY" > "$key_file"
           unset OPENIDEA_KEY
           export OPENIDEA_KEY_FILE="$key_file"
-          ./scripts/release.sh
+          ./src/tooling/release.sh
       - name: Collect server binaries
         uses: actions/download-artifact@v4
         with:
@@ -93,7 +95,7 @@ jobs:
       - name: Checksum all release files
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 scripts/checksums.py "dist-release/$RELEASE_TAG"
+        run: python3 src/tooling/checksums.py "dist-release/$RELEASE_TAG"
       - name: Upload reviewable artifacts
         uses: actions/upload-artifact@v4
         with:
