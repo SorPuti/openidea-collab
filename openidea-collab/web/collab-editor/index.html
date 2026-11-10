@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Editor colaborativo experimental</title>
+<style>
+:root { color-scheme: dark; --bg: var(--openidea-bg,#181b20); --fg: var(--openidea-fg,#e4e9ef); --border: var(--openidea-border,#414a57); --accent: var(--openidea-accent,#72acf8); }
+* { box-sizing: border-box; } [hidden] { display:none !important; }
+html,body { height:100%; } body { display:flex; flex-direction:column; margin:0; background:var(--bg); color:var(--fg); font:13px var(--openidea-font-ui,system-ui,sans-serif); }
+header { flex:none; max-height:55vh; overflow:auto; padding:16px 20px; border-bottom:1px solid var(--border); }
+h1 { font-size:15px; margin:0 0 5px; letter-spacing:.01em; }
+h1 small { font-weight:500; opacity:.7; margin-left:5px; }
+p { line-height:1.45; margin:6px 0; } #status { font-weight:600; } #status::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--accent); margin-right:8px; }
+form { display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin-top:14px; }
+label { display:flex; flex-direction:column; gap:5px; min-width:150px; flex:1; }
+input,select,button { font:inherit; color:inherit; border:1px solid var(--border); background:var(--bg); padding:8px 10px; border-radius:5px; }
+input:hover,select:hover,button:hover { border-color:var(--accent); } button { cursor:pointer; border-color:var(--accent); } button:disabled { opacity:.55; cursor:default; }
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#start { background:var(--accent); color:#101820; font-weight:600; }
+.recovery-choice { flex:1 0 100%; display:flex; flex-direction:row; align-items:center; gap:8px; min-width:0; opacity:.86; } .recovery-choice input { margin:0; flex:none; }
+#session-controls { display:flex; gap:8px; margin-top:12px; } #sharing { margin-top:12px; } #sharing label { margin-top:10px; }
+#invite-output { width:100%; height:64px; resize:vertical; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:5px; padding:8px; font:12px var(--openidea-font-mono,monospace); }
+#clear-invite { margin-top:7px; } #editor { display:block; flex:1; width:100%; min-height:120px; resize:none; background:var(--bg); color:var(--fg); border:0; padding:18px 20px; line-height:1.6; font:13px var(--openidea-font-mono,monospace); tab-size:4; }
+#error { color:#ffadad; white-space:pre-wrap; } small { opacity:.75; display:block; margin-top:10px; } #recovery-location { overflow-wrap:anywhere; }
+@media (max-width:600px) { header { padding:14px; } form label { flex:1 1 100%; } #start { width:100%; } #editor { padding:14px; } }
+</style></head><body>
+<header><h1>OpenIDEA Collab <small>Editor colaborativo experimental</small></h1><p id="status" role="status">Carregando documento…</p><p id="error" role="alert" hidden></p>
+<form id="connect"><label>Servidor HTTPS (ou loopback)<input id="endpoint" type="url" value="http://127.0.0.1:4445" required></label><label>Documento<input id="document" value="main" autocomplete="off" required></label><label>Operação<select id="mode"><option value="create">Criar sessão</option><option value="join">Entrar com convite</option></select></label><label id="invite-field" hidden>Convite<input id="invite-input" type="password" autocomplete="off"></label><button id="start" type="submit">Continuar</button><label class="recovery-choice"><input id="recovery" type="checkbox"> Guardar cópia local de recuperação (texto sem criptografia; exclusão manual)</label></form><p id="recovery-location" hidden></p>
+<div id="session-controls" hidden><button id="create-invite" type="button">Criar convite de edição</button><button id="leave-session" type="button">Sair da sessão</button></div>
+<div id="sharing" hidden><label>Convite de uso único — copie e compartilhe com cuidado<textarea id="invite-output" aria-label="Convite de edição" readonly></textarea></label><button id="clear-invite" type="button">Limpar convite exibido</button></div>
+<small>Requer o auxiliar instalado, projeto confiável e permissão de execução. A cópia local permite recuperar texto manualmente; não restaura a sessão automaticamente.</small></header>
+<textarea id="editor" aria-label="Conteúdo do documento colaborativo" spellcheck="false" readonly></textarea>
+<script src="config.js"></script><script src="editor.js"></script></body></html>

@@ -99,6 +99,7 @@ struct PresenceRequest {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/health", get(health))
         .route("/rooms", post(create_room))
         .route("/rooms/{id}", get(get_room))
         .route("/rooms/{id}/join", post(join_room))
@@ -108,6 +109,10 @@ pub fn router(state: AppState) -> Router {
         .route("/rooms/{id}/events", get(get_events))
         .route("/rooms/{id}/members/{uid}/presence", post(post_presence))
         .with_state(state)
+}
+
+async fn health() -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "service": "openidea-collab", "status": "ok", "api": "legacy" }))
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -212,10 +217,10 @@ async fn update_file(
             // Update presence for the requesting user (file only; cursor unchanged).
             room.update_presence(&body.user_id, Some(path.clone()), None, None, None);
 
-            // Detect conflict: version mismatch from a different user.
+            // Reject any stale version, including updates from the same user.
             let conflict_info: Option<(String, String, u64)> =
                 room.files.get(&path).and_then(|file| {
-                    if file.version != body.version && file.last_user != body.user_id {
+                    if file.version != body.version {
                         Some((file.last_user.clone(), file.text.clone(), file.version))
                     } else {
                         None
@@ -324,12 +329,16 @@ async fn get_events(
     let cursor = params.cursor.unwrap_or(0);
 
     // Snapshot events under mutex (no blocking inside the lock).
-    let (initial_events, base_next_cursor) = {
+    let (initial_events, base_next_cursor, mut changes) = {
         let guard = state
             .lock()
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let room = guard.get(&id).ok_or(StatusCode::NOT_FOUND)?;
-        (room.events.since(cursor), room.events.next_id())
+        (
+            room.events.since(cursor),
+            room.events.next_id(),
+            room.events.subscribe(),
+        )
     };
 
     if !initial_events.is_empty() {
@@ -344,8 +353,8 @@ async fn get_events(
         }));
     }
 
-    // No events yet — long-poll: sleep 5 s outside the mutex.
-    tokio::time::sleep(std::time::Duration::from_millis(5000)).await;
+    // Subscribe under the same lock as the snapshot so no event is missed.
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), changes.changed()).await;
 
     let guard = state
         .lock()
@@ -376,7 +385,13 @@ async fn post_presence(
     if !room.members.contains_key(&uid) {
         return Err(StatusCode::NOT_FOUND);
     }
-    room.update_presence(&uid, body.current_file.clone(), body.github.clone(), body.line, body.col);
+    room.update_presence(
+        &uid,
+        body.current_file.clone(),
+        body.github.clone(),
+        body.line,
+        body.col,
+    );
     room.events.push(RoomEvent::PresenceChanged {
         user_id: uid,
         file: body.current_file,

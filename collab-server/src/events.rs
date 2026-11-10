@@ -39,13 +39,16 @@ pub struct EventEnvelope {
 pub struct EventStore {
     events: Vec<EventEnvelope>,
     next_id: u64,
+    changed: tokio::sync::watch::Sender<u64>,
 }
 
 impl EventStore {
     pub fn new() -> Self {
+        let (changed, _) = tokio::sync::watch::channel(0);
         EventStore {
             events: Vec::new(),
             next_id: 0,
+            changed,
         }
     }
 
@@ -54,6 +57,7 @@ impl EventStore {
         let id = self.next_id;
         self.events.push(EventEnvelope { id, event });
         self.next_id += 1;
+        self.changed.send_replace(self.next_id);
         id
     }
 
@@ -69,6 +73,10 @@ impl EventStore {
     /// Next id that will be assigned (useful as next_cursor for callers).
     pub fn next_id(&self) -> u64 {
         self.next_id
+    }
+
+    pub fn subscribe(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.changed.subscribe()
     }
 }
 

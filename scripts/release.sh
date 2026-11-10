@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$SCRIPT_DIR/.."
 PLUGIN_DIR="$ROOT/openidea-collab"
-DIST_DIR="$ROOT/dist-release"
+DIST_DIR="${OPENIDEA_RELEASE_DIR:-$ROOT/dist-release}"
 
 # --- args ---
 KEY_FILE="${OPENIDEA_KEY_FILE:-}"
@@ -23,21 +23,31 @@ usage() {
 
 [[ -z "$KEY_FILE" || -z "$PUBLISHER" || -z "$DOWNLOAD_BASE" ]] && usage
 
-VERSION=$(grep '^version' "$PLUGIN_DIR/plugin.toml" | head -1 | sed 's/version = "\(.*\)"/\1/')
-PACKAGE_FILE="ai.l0ng.openidea-collab-${VERSION}.oiplugin"
+PACKAGE_FILE="$(python3 - "$PLUGIN_DIR/plugin.toml" "$PUBLISHER" <<'PY'
+import sys, tomllib
+with open(sys.argv[1], 'rb') as file:
+    manifest = tomllib.load(file)
+plugin_id, version = manifest['id'], manifest['version']
+if not plugin_id.startswith(sys.argv[2] + '.'):
+    raise SystemExit('Publisher must match the plugin ID in plugin.toml.')
+print(f'{plugin_id}-{version}.oiplugin')
+PY
+)"
 
-echo "▶ Versão: $VERSION"
+echo "▶ Pacote: $PACKAGE_FILE"
 echo "▶ Publisher: $PUBLISHER"
 
 # build WASM
 echo "▶ Buildando plugin WASM..."
 cd "$PLUGIN_DIR"
 openidea-plugin build
+openidea-plugin check "$PLUGIN_DIR"
 
 # pack
 echo "▶ Empacotando..."
 mkdir -p "$DIST_DIR"
 openidea-plugin pack "$PLUGIN_DIR" --key "$KEY_FILE" --publisher "$PUBLISHER" --out "$DIST_DIR/$PACKAGE_FILE"
+openidea-plugin check "$DIST_DIR/$PACKAGE_FILE"
 
 # generate index
 echo "▶ Gerando index.json..."

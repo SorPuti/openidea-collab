@@ -20,6 +20,19 @@ fn oe(e: openidea_plugin::Error) -> anyhow::Error {
     anyhow::anyhow!("{e}")
 }
 
+fn encode_path(path: &str) -> String {
+    use std::fmt::Write;
+    let mut encoded = String::new();
+    for byte in path.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            write!(encoded, "%{byte:02X}").expect("write to string");
+        }
+    }
+    encoded
+}
+
 impl CollabClient {
     pub fn new(server_url: String) -> Self {
         Self { server_url }
@@ -93,6 +106,19 @@ impl CollabClient {
         }
     }
 
+    /// Check that the endpoint responds with the expected Collab health payload.
+    pub fn ping(&self, url: &str) -> Result<(), anyhow::Error> {
+        let req = HttpRequest::get(&format!("{url}/health"))
+            .header("accept", "application/json");
+        let resp = host::fetch(&req).map_err(oe)?;
+        let body: serde_json::Value = serde_json::from_slice(&resp.body).unwrap_or_default();
+        if resp.status == 200 && body["service"] == "openidea-collab" && body["status"] == "ok" && body["api"] == "legacy" {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("incompatible Collab server or unexpected response (HTTP {})", resp.status))
+        }
+    }
+
     /// POST /rooms/{id}/files/{path}  body: { user_id, version, text }  → { version }
     pub fn post_file(
         &self,
@@ -102,7 +128,7 @@ impl CollabClient {
         version: u64,
         text: &str,
     ) -> Result<u64, anyhow::Error> {
-        let encoded_path = path.replace('/', "%2F");
+        let encoded_path = encode_path(path);
         let url = format!("{}/rooms/{room_id}/files/{encoded_path}", self.server_url);
         let payload = serde_json::to_vec(
             &serde_json::json!({ "user_id": user_id, "version": version, "text": text }),
@@ -170,7 +196,7 @@ impl CollabClient {
 
     /// GET /rooms/{id}/files/{path} → { version, text, user_id }
     pub fn get_file(&self, room_id: &str, path: &str) -> Result<(u64, String), anyhow::Error> {
-        let encoded_path = path.replace('/', "%2F");
+        let encoded_path = encode_path(path);
         let url = format!("{}/rooms/{room_id}/files/{encoded_path}", self.server_url);
         let mut req = HttpRequest::get(&url).header("accept", "application/json");
         req.timeout_ms = Some(5000);

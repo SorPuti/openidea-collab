@@ -1,170 +1,58 @@
 # OpenIDEA Collab
 
-Real-time collaborative editing for [OpenIDEA](https://github.com/l0ng-ai/openidea) — sync files between developers (and AI agents) over HTTP long-poll without WebSockets.
+An experimental collaborative editor for OpenIDEA. Two clients can edit the same `.collabtest` document through a Collab server. The native editor and whole-project synchronization are not implemented. The previous save-based sidebar is no longer registered.
 
-![OpenIDEA Collab v0.2 — cursor decorations, GitHub avatars and presence panel](screenshots/demo.svg)
+## Install a prebuilt client (Linux x86_64)
 
-## Features
+Download the `openidea-collab-client-linux-x86_64.tar.gz` artifact from a release you trust, extract it, and run:
 
-- **Room-based sessions** — create or join a room with a simple ID
-- **File sync** — changes are pushed to all room members within ~500 ms
-- **Live cursor decorations** — see teammates' cursor positions as inline after-text annotations
-- **GitHub avatars** — connect a GitHub username for real profile photos in the panel
-- **File-tree badges** — open files get a `●` badge showing how many peers have them open
-- **Status bar** — room ID and peer count visible at the bottom of the editor at all times
-- **HTML presence panel** — animated sidebar showing all peers with avatars, files, and cursor positions
-- **Remote server** — configure any HTTP URL with *Collab: Set Server URL* (ngrok, Cloudflare Tunnel, etc.)
-- **3-way merge** — conflict detection; 409 returned on unresolvable conflicts
-- **AI-agent ready** — collab-server exposes a plain REST API any agent can call
-
-## Architecture
-
-```
-┌────────────────┐    HTTP long-poll     ┌──────────────────┐
-│  OpenIDEA IDE  │◄──────────────────────│  collab-server   │
-│  (plugin WASM) │──────────────────────►│  (axum / Tokio)  │
-└────────────────┘   POST /rooms/:id/…   └──────────────────┘
+```sh
+cd collab-client
+bash install-client.sh
 ```
 
-| Component | Description |
-|-----------|-------------|
-| `openidea-collab/` | Plugin (Rust → `wasm32-wasip2`) — commands, sync loop, presence panel |
-| `collab-server/` | Standalone HTTP server — rooms, events, presence, file store |
-| `scripts/` | Dev helpers (`dev-server.sh`, `dev-plugin.sh`) |
-| `.github/workflows/release.yml` | CI: build → pack → create GitHub Release |
+The script verifies the included files and copies them to a new directory under `~/.local/share/openidea-collab-client`. No Rust toolchain, OpenIDEA plugin CLI, server or tunnel is installed on the client. To also install the prebuilt local server on a host, run `bash install-client.sh --server`; it prints a script to start it manually and does not start it automatically. Checksums detect corruption but are not a signature. This is currently an **unsigned experimental package**.
 
-## Quick start
+In OpenIDEA, use **Settings → Plugins → Install Plugin from Package File…** and select the printed `plugin.oiplugin`. In its `process:openidea-collab-helper` permission, choose and approve the printed helper executable. The helper can execute code on your machine; approve it only if you trust the package. Open a trusted project and open a `.collabtest` file: it now opens directly in the collaborative editor. **Open as Text** remains available from the IDE.
 
-### 1. Run the server
+On both machines select the same server and document name. Create a session in one editor, make a one-use invite, and enter it in the other editor. Both local files must initially have the same text. Do not post the invite publicly: it grants room access. The server URL `http://127.0.0.1:4445` only reaches the current machine; it is not a connection between different machines.
 
-```bash
-# Install Rust if needed: https://rustup.rs
-cargo run --manifest-path collab-server/Cargo.toml
-# Server listens on http://localhost:4444
+## Server and connectivity
+
+A remote server is a separate operator choice. The experimental server listens on loopback only; remote clients require an independently operated HTTPS reverse proxy and an existing publicly reachable address. The client does not install ngrok. There is no hosted service supplied by this project yet, and no deployment should be described as production-ready before security review and operational testing.
+
+For local development, the source installer can build and start a separate server:
+
+```sh
+bash install.sh --experimental --mode local --start-server --persist
 ```
 
-Environment variables:
+The server journal contains source text and credential hashes without encryption. Its `--persist` option is explicit; the process is not configured to start on login. The server and client require security, resource limits, backup and recovery review before exposure. Transport TLS does not provide end-to-end encryption from the server operator.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `COLLAB_PORT` | `4444` | Listening port |
-| `RUST_LOG` | `info` | Log level |
+## Current limitations
 
-### 2. Build and install the plugin
+- Only `.collabtest` files in the custom editor; no full-project bootstrap, file tree synchronization, native-editor integration or language tooling parity.
+- The helper's text limit is 4 KiB. Server document state is limited to 1 MiB and journal event payloads to 64 MiB, with 4 MiB reserved for revocations. No on-disk compaction yet.
+- Pending CRDT changes are not recovered automatically after the helper exits. An optional local plaintext text copy supports manual recovery and must be removed manually.
+- The package and helper are experimental and not signed. Linux x86_64 is the only prebuilt target currently prepared; other systems need their own build and testing.
+- A maintained managed endpoint, project-wide permissions, encrypted project transfer, large-project filtering, and installation on multiple platforms are still work to do.
 
-```bash
-# Install the OpenIDEA plugin CLI
-cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
+## Build from source
 
-# Build
-cd openidea-collab
-openidea-plugin build        # output: dist/plugin.wasm
+Requirements: Rust, the `wasm32-wasip2` target and the `openidea-plugin` CLI matching the IDE.
 
-# Install into OpenIDEA (dev link)
-openidea-plugin link .
-```
-
-### 3. (Optional) Set a remote server
-
-Run **Collab: Set Server URL** and enter your server's public URL.
-
-> **Cross-network**: `ngrok http 4444` gives you an HTTPS URL — paste it into *Set Server URL* on both machines.
-
-### 4. Start collaborating
-
-1. Open the **Collaborators** panel in the right sidebar.
-2. Run **Collab: Create Room** — enter your name and (optionally) GitHub username.
-3. Share the Room ID and server URL with your collaborator.
-4. On the other machine: run **Collab: Join Room**, enter the Room ID, name, and GitHub username.
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| **Collab: Create Room** | Create a new room, ask for name + GitHub username |
-| **Collab: Join Room** | Join an existing room by ID |
-| **Collab: Leave Room** | Leave the current room |
-| **Collab: Set Server URL** | Configure the collab-server endpoint |
-
-## REST API (collab-server)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/rooms` | Create room → `{"room_id": "…"}` |
-| `POST` | `/rooms/{id}/join` | Join room, get `member_id` |
-| `GET` | `/rooms/{id}/members` | List present members |
-| `POST` | `/rooms/{id}/members/{uid}/presence` | Update current file + cursor position |
-| `GET` | `/rooms/{id}/files/{*path}` | Get latest file text + version |
-| `POST` | `/rooms/{id}/files/{*path}` | Push file update (conflict → 409) |
-| `GET` | `/rooms/{id}/events?cursor=N` | Long-poll for new events (holds 5 s) |
-
-All endpoints return JSON. The `events` endpoint holds the connection open until an event arrives or the timeout expires.
-
-## Install
-
-### One-line installer (Linux · macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/SorPuti/openidea-collab/master/install.sh | bash
-```
-
-The script:
-- Detects your OS (Fedora, Ubuntu/Debian, Arch, macOS)
-- Installs Rust via `rustup` if needed
-- Installs the `openidea-plugin` CLI
-- Builds and installs `collab-server` to `~/.local/bin/`
-- Builds the plugin from source (`wasm32-wasip2`) and registers it via `openidea-plugin link` (bypasses publisher verification — no marketplace approval required)
-- Registers a **systemd user service** (Linux) or **launchd agent** (macOS) so the server starts automatically on login
-- Restart OpenIDEA after the script finishes — the plugin loads automatically
-
-If already installed, running the script again **updates** the server and plugin, then restarts the service automatically.
-
-> Override defaults with env vars: `COLLAB_PORT=5000 COLLAB_INSTALL_DIR=/usr/local/bin curl … | bash`
-
-### From marketplace (once PR is merged)
-
-In **OpenIDEA → Settings → Plugins → Available**, search for `openidea-collab`.
-
-### Manual plugin install (dev link, no marketplace required)
-
-```bash
-# Install the plugin CLI
-cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
-
-# Clone and build
-git clone https://github.com/SorPuti/openidea-collab.git
-cd openidea-collab
-rustup target add wasm32-wasip2
+```sh
+cargo test --locked --manifest-path collab-core/Cargo.toml
+cargo test --locked --manifest-path collab-helper/Cargo.toml
+cargo test --locked --manifest-path collab-server/Cargo.toml
 openidea-plugin build openidea-collab
-openidea-plugin link openidea-collab
+cargo build --release --locked --manifest-path collab-helper/Cargo.toml
+cargo build --release --locked --manifest-path collab-server/Cargo.toml
+bash scripts/package-client.sh ./openidea-collab-client-linux-x86_64.tar.gz
 ```
 
-Restart OpenIDEA — the plugin loads automatically.
-
-## Development
-
-```bash
-# Run server with auto-reload (requires cargo-watch)
-cargo watch -x 'run --manifest-path collab-server/Cargo.toml'
-
-# Run server tests
-cargo test --manifest-path collab-server/Cargo.toml
-
-# Rebuild plugin after code changes
-cd openidea-collab && openidea-plugin build
-```
-
-## Release
-
-Tag a version to trigger the GitHub Actions release workflow:
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-The workflow builds the plugin, packs it as `.oiplugin`, and creates a GitHub Release. Required secrets: `OPENIDEA_KEY` (PEM signing key content) and `OPENIDEA_PUBLISHER_ID` (`sorputi`).
+The CI workflow tests components and prepares artifacts; it does not itself publish a GitHub release. `scripts/release.sh` prepares a signed plugin package only when supplied with the publisher's signing key. Never commit the key.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT; see [LICENSE](LICENSE). Review third-party dependency notices before distribution.

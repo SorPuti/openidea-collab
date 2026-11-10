@@ -14,10 +14,29 @@ const DECORATION_SET: &str = "collab-cursors";
 const FILE_BADGE_SET: &str = "collab-open";
 const STATUS_ITEM_ID: &str = "collab-status";
 
+/// Map local editor paths to portable project-relative paths; reject traversal.
+fn relative_path(path: &str, root: &str) -> Option<String> {
+    let path = path.replace('\\', "/");
+    let root = root.replace('\\', "/");
+    let root = root.trim_end_matches('/');
+    let relative = if let Some(rest) = path.strip_prefix(root).and_then(|p| p.strip_prefix('/')) {
+        rest
+    } else if !path.starts_with('/') && !path.as_bytes().get(1).is_some_and(|b| *b == b':') {
+        path.as_str()
+    } else {
+        return None;
+    };
+    if relative.is_empty() || relative.split('/').any(|part| part.is_empty() || part == "." || part == "..") {
+        return None;
+    }
+    Some(relative.to_owned())
+}
+
 pub struct SyncState {
     pub room: Option<RoomState>,
     pub presence: PresenceState,
     pub file_versions: HashMap<String, u64>,
+    pub last_synced_texts: HashMap<String, String>,
     pub poll_cursor: u64,
     pub sync_active: bool,
 }
@@ -28,6 +47,7 @@ impl Default for SyncState {
             room: None,
             presence: PresenceState::new(String::new(), String::new()),
             file_versions: HashMap::new(),
+            last_synced_texts: HashMap::new(),
             poll_cursor: 0,
             sync_active: false,
         }
@@ -43,6 +63,7 @@ impl SyncState {
                     presence: PresenceState::new(room.user_id.clone(), room.name.clone()),
                     room: Some(room),
                     file_versions: HashMap::new(),
+                    last_synced_texts: HashMap::new(),
                     poll_cursor: 0,
                     sync_active: false,
                 },
@@ -73,14 +94,23 @@ impl SyncState {
             Some(p) => p,
             None => return,
         };
+        let root = match project.root() { Ok(root) => root, Err(_) => return };
+        let shared_path = match relative_path(path, &root) {
+            Some(path) => path,
+            None => {
+                host::notify(NotificationLevel::Warning, "Collab Sync", "File is outside the shared project.");
+                return;
+            }
+        };
         let text = match project.read_file(path) {
             Ok(t) => t,
             Err(_) => return,
         };
-        let version = self.file_versions.get(path).copied().unwrap_or(0);
-        match client.post_file(&room.room_id, &room.user_id, path, version, &text) {
+        let version = self.file_versions.get(&shared_path).copied().unwrap_or(0);
+        match client.post_file(&room.room_id, &room.user_id, &shared_path, version, &text) {
             Ok(new_version) => {
-                self.file_versions.insert(path.to_owned(), new_version);
+                self.file_versions.insert(shared_path.clone(), new_version);
+                self.last_synced_texts.insert(shared_path, text);
                 self.sync_active = true;
             }
             Err(e) => {
@@ -89,7 +119,7 @@ impl SyncState {
                     host::notify(
                         NotificationLevel::Warning,
                         "Collab Conflict",
-                        "Conflict detected — another user modified this file. Save again to overwrite.",
+                        "Conflict detected. Your local file was not sent; compare it with the server before retrying.",
                     );
                 } else {
                     host::notify(
@@ -122,7 +152,13 @@ impl SyncState {
             let event_type = inner["type"].as_str().unwrap_or("");
             match event_type {
                 "file_updated" => {
-                    self.apply_file_updated(client, ctx, inner, &room);
+                    if let Err(error) = self.apply_file_updated(client, ctx, inner, &room) {
+                        self.sync_active = false;
+                        self.update_status_bar(&room.room_id);
+                        self.push_panel_state(&room.room_id);
+                        host::notify(NotificationLevel::Warning, "Collab Sync", &format!("Could not apply a remote update: {error}. It will be retried."));
+                        return;
+                    }
                 }
                 "member_joined" => {
                     if let (Some(uid), Some(name)) =
@@ -175,6 +211,9 @@ impl SyncState {
                 }
                 _ => {}
             }
+            if let Some(id) = envelope["id"].as_u64() {
+                self.poll_cursor = id.saturating_add(1);
+            }
         }
         self.poll_cursor = result.next_cursor;
         self.sync_active = true;
@@ -192,22 +231,37 @@ impl SyncState {
         ctx: &Invocation,
         event: &serde_json::Value,
         room: &RoomState,
-    ) {
+    ) -> Result<(), String> {
         let path = match event["path"].as_str() {
             Some(p) => p,
-            None => return,
+            None => return Err("missing file path".into()),
         };
+        if path.starts_with('/') || path.contains('\\') || path.as_bytes().get(1) == Some(&b':')
+            || path.split('/').any(|part| part.is_empty() || part == "." || part == "..")
+        {
+            return Err("invalid remote project path".into());
+        }
         let remote_version = event["version"].as_u64().unwrap_or(0);
         let local_version = self.file_versions.get(path).copied().unwrap_or(0);
         if remote_version <= local_version {
-            return;
+            return Ok(());
         }
-        if let Ok((version, text)) = client.get_file(&room.room_id, path)
-            && let Some(project) = ctx.project()
-            && project.write_file(path, &text).is_ok()
-        {
-            self.file_versions.insert(path.to_owned(), version);
+        let (version, text) = client.get_file(&room.room_id, path).map_err(|e| e.to_string())?;
+        let project = ctx.project().ok_or("no project available")?;
+        match project.read_file(path) {
+            Ok(local) if local == text => {}
+            Ok(local) if self.last_synced_texts.get(path) == Some(&local) => {
+                project.write_file(path, &text).map_err(|e| e.to_string())?;
+            }
+            Ok(_) => return Err(format!("{path} has local changes; compare before applying the remote version")),
+            Err(openidea_plugin::Error::NotFound(_)) if !self.last_synced_texts.contains_key(path) => {
+                project.write_file(path, &text).map_err(|e| e.to_string())?;
+            }
+            Err(error) => return Err(format!("could not safely read {path}: {error}")),
         }
+        self.file_versions.insert(path.to_owned(), version);
+        self.last_synced_texts.insert(path.to_owned(), text);
+        Ok(())
     }
 
     /// Set inline cursor decorations: show peer name and cursor position after their line.
@@ -302,6 +356,5 @@ impl SyncState {
         if let Ok(msg) = serde_json::to_string(&payload) {
             let _ = host::post_view_message(VIEW_COLLAB_PANEL, &msg);
         }
-        host::refresh_view(VIEW_COLLAB_PANEL);
     }
 }

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use collab_server::routes::router;
@@ -26,13 +25,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    let app = router(state);
+    let mode = std::env::var("COLLAB_API").unwrap_or_else(|_| "legacy".into());
+    let app = match mode.as_str() {
+        "legacy" => router(state),
+        "realtime" => {
+            if let Some(path) = std::env::var_os("COLLAB_JOURNAL") {
+                let path = std::path::PathBuf::from(path);
+                if !path.is_absolute() {
+                    return Err(
+                        "COLLAB_JOURNAL must be an absolute path in a private directory".into(),
+                    );
+                }
+                tracing::warn!(
+                    "Experimental journal enabled; secure and back up its private directory"
+                );
+                collab_server::realtime::persistent_router(&path)?
+            } else {
+                tracing::warn!(
+                    "Experimental real-time API: state is in memory and is lost on restart"
+                );
+                collab_server::realtime::router()
+            }
+        }
+        _ => return Err("COLLAB_API must be legacy or realtime".into()),
+    };
 
     let port: u16 = std::env::var("COLLAB_PORT")
         .unwrap_or_else(|_| "4444".to_string())
         .parse()
         .unwrap_or(4444);
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let host = std::env::var("COLLAB_BIND").ok();
+    let addr = collab_server::bind_address(host.as_deref(), port)?;
+
+    if mode == "realtime" && !addr.ip().is_loopback() {
+        return Err(
+            "realtime API requires a loopback bind; use an HTTPS reverse proxy for remote access"
+                .into(),
+        );
+    }
+
+    if !addr.ip().is_loopback() {
+        tracing::warn!("External bind selected; this prototype does not authenticate clients. Protect access before exposing it.");
+    }
 
     tracing::info!("collab-server listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;

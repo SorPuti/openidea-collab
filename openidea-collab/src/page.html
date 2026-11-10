@@ -1,0 +1,344 @@
+<style>
+  :root {
+    --bg:     var(--openidea-bg,       #1e1e1e);
+    --fg:     var(--openidea-fg,       #cccccc);
+    --accent: var(--openidea-accent,   #007fd4);
+    --card:   var(--openidea-bg-elevated, #252526);
+    --border: var(--openidea-border,   #3c3c3c);
+    --input:  var(--openidea-bg-input, #3c3c3c);
+    --muted:  var(--openidea-fg-muted, #888);
+    --green:  #4caf50;
+    --danger: #e05252;
+    --radius: 6px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  body { background: var(--bg); color: var(--fg); padding: 12px 10px 20px; font-family: var(--openidea-font-ui, system-ui, sans-serif); font-size: 13px; }
+
+  .hdr { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; }
+  .hdr-spacer { flex: 1; }
+  .badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+  .badge-dev { background: #c4860018; color: #c48600; border: 1px solid #c4860038; }
+  .gear-btn { cursor: pointer; background: none; border: none; color: var(--muted); font-size: 14px; padding: 2px 4px; border-radius: 4px; line-height: 1; }
+  .gear-btn:hover { color: var(--fg); }
+
+  .drawer-lbl { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+  .drawer-row { display: flex; gap: 6px; align-items: center; }
+  #server-drawer { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; margin-bottom: 10px; }
+
+  .build-bar { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; margin-bottom: 12px; font-size: 10px; color: var(--muted); }
+  .build-bar strong { color: var(--fg); }
+  .sep { color: var(--border); }
+
+  #profile-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  #profile-av { width: 36px; height: 36px; border-radius: 50%; background: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .profile-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+  input[type=text] { width: 100%; padding: 6px 8px; background: var(--input); border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font-size: 12px; outline: none; }
+  input[type=text]:focus { border-color: var(--accent); }
+  .field-label { display: block; font-size: 11px; color: var(--muted); margin: 4px 0 2px; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn { width: 100%; padding: 8px; border-radius: var(--radius); border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: .9; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--fg); }
+  .btn-outline:hover { background: var(--card); }
+  .btn-danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+  .divider { text-align: center; color: var(--muted); font-size: 11px; margin: 10px 0; }
+  .join-row { display: flex; flex-direction: column; gap: 6px; }
+
+  #err { background: #e0525210; border: 1px solid #e0525230; border-radius: var(--radius); color: #f08080; font-size: 12px; padding: 7px 10px; margin-top: 8px; line-height: 1.4; }
+  #loading { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 12px; padding: 6px 0; margin-top: 4px; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .room-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
+  .room-id-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .room-id-val { font-family: var(--openidea-font-mono, monospace); font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: 1px; flex: 1; }
+  .copy-btn { background: none; border: 1px solid var(--border); border-radius: 3px; color: var(--muted); cursor: pointer; font-size: 12px; padding: 1px 6px; }
+  .copy-btn:hover { color: var(--fg); }
+  .room-hint { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .section-hdr { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  .peer { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 4px; }
+  .peer:hover { background: var(--card); }
+  .peer-av { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; }
+  .peer-name { font-weight: 600; font-size: 12px; }
+  .peer-detail { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  #empty { color: var(--muted); text-align: center; padding: 16px 0; font-size: 12px; }
+  #sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; display: inline-block; margin-right: 4px; }
+  #sync-dot.on { background: var(--green); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  #ping-result { font-size: 11px; margin-top: 4px; padding: 4px 8px; border-radius: 4px; }
+  .ping-ok { background: #4caf5012; color: #4caf50; border: 1px solid #4caf5030; }
+  .ping-err { background: #e0525212; color: #f08080; border: 1px solid #e0525230; }
+
+  #dbg-log { font-size: 9px; line-height: 1.4; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; margin-top: 4px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 180px; overflow-y: auto; }
+</style>
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+    <circle cx="14" cy="14" r="12.5" stroke="var(--accent)" stroke-width="1.2" fill="none" opacity=".5"/>
+    <path d="M14 3 L25 14 L14 25 L3 14 Z" fill="var(--accent)" fill-opacity=".18" stroke="var(--accent)" stroke-width="1.2"/>
+    <path d="M14 7.5 L20.5 14 L14 20.5 L7.5 14 Z" fill="var(--accent)" fill-opacity=".35"/>
+    <circle cx="14" cy="14" r="2.5" fill="var(--accent)"/>
+  </svg>
+  <div>
+    <div style="font-size:14px;font-weight:700;line-height:1.1">OpenIDEA Collab</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:1px">Sincronização ao salvar</div>
+  </div>
+</div>
+
+<div class="build-bar" id="build-info" hidden>
+  <strong>v__VERSION__</strong>
+  <span class="sep">·</span>
+  <span id="build-mode">__BUILD_MODE__</span>
+  <span class="sep">·</span>
+  <span>__BUILD_TIME__</span>
+</div>
+
+<!-- NOT CONNECTED -->
+<div id="nc">
+  <div class="hdr" style="margin-bottom:8px">
+    <span class="hdr-spacer"></span>
+    <span id="nc-badge" class="badge"></span>
+    <button class="gear-btn" id="btn-gear" title="Configurações">&#9881;</button>
+  </div>
+
+  <div id="server-drawer" hidden>
+    <div class="drawer-lbl">Servidor Collab</div>
+    <div class="drawer-row">
+      <input type="text" id="inp-server" aria-label="Endereço do servidor" value="__SERVER_URL__" placeholder="http://localhost:4444">
+      <button class="btn btn-outline" id="btn-save-server" style="width:auto;padding:5px 10px;font-size:12px;white-space:nowrap">Salvar</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn btn-outline" id="btn-ping" style="font-size:11px;padding:4px 8px">&#128299; Testar</button>
+    </div>
+    <div id="ping-result" hidden></div>
+  </div>
+
+  <div id="profile-card">
+    <div id="profile-av">?</div>
+    <div class="profile-fields">
+      <label class="field-label" for="inp-name">Seu nome</label>
+      <input type="text" id="inp-name" placeholder="Seu nome" value="__INIT_NAME__">
+      <label class="field-label" for="inp-github">GitHub (opcional)</label>
+      <input type="text" id="inp-github" placeholder="@github" value="__INIT_GITHUB__">
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-create">+ Criar Nova Sala</button>
+  <div class="divider">ou entrar numa sala</div>
+  <div class="join-row">
+    <label class="field-label" for="inp-room">Código da sala</label>
+    <input type="text" id="inp-room" placeholder="Código da sala">
+    <button class="btn btn-outline" id="btn-join">&rarr; Entrar na Sala</button>
+  </div>
+
+  <div id="err" role="alert" hidden></div>
+  <div id="loading" role="status" hidden><div class="spinner"></div><span id="loading-text"></span></div>
+</div>
+
+<!-- CONNECTED -->
+<div id="app" hidden>
+  <div class="room-card">
+    <div role="status"><span id="sync-dot"></span><span id="sync-label" style="font-size:12px">Sincronização pendente</span></div>
+    <div class="room-id-row">
+      <span class="room-id-val" id="room-id">-</span>
+      <button class="copy-btn" id="btn-copy-room" aria-label="Copiar código da sala">&#10070;</button>
+    </div>
+    <div class="room-hint">Compartilhe o Room ID com seu colaborador.</div>
+    <div id="conn-server" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+  </div>
+  <div class="section-hdr">Colaboradores</div>
+  <div id="peers"></div>
+  <div id="empty" hidden>Aguardando colaboradores...</div>
+  <div style="margin-top:14px">
+    <button class="btn btn-danger" id="btn-leave">&larr; Sair da Sala</button>
+  </div>
+</div>
+
+<details id="debug-details" style="margin-top:14px" hidden>
+  <summary style="font-size:10px;color:var(--muted);cursor:pointer;user-select:none">&#9654; Debug log</summary>
+  <pre id="dbg-log">html-v__VERSION__</pre>
+</details>
+
+<script>
+(() => {
+  const IS_DEV = "__IS_DEV__" === "true";
+  const SERVER_URL = __SERVER_URL_JSON__;
+
+  const $ = (id) => document.getElementById(id);
+  const nc = $("nc"), app = $("app");
+  let settingsOpen = false;
+  const dbgLines = [];
+
+  const dbg = (msg) => {
+    const ts = new Date().toISOString().slice(11, 23);
+    dbgLines.push("[" + ts + "] " + msg);
+    if (dbgLines.length > 40) dbgLines.shift();
+    const el = $("dbg-log");
+    if (el) el.textContent = dbgLines.join("\n");
+    console.log("[collab]", msg);
+  };
+
+  const sendMsg = (obj) => {
+    dbg("send " + obj.type);
+    openidea.postMessage(JSON.stringify(obj));
+  };
+
+  const showErr = (msg) => { const e = $("err"); if (e) { e.textContent = msg; e.hidden = false; } };
+  const hideErr = () => { const e = $("err"); if (e) e.hidden = true; };
+
+  const setLoading = (on, text) => {
+    const el = $("loading"); if (!el) return;
+    el.hidden = !on;
+    const lt = $("loading-text"); if (lt && on) lt.textContent = text || "";
+    const bc = $("btn-create"), bj = $("btn-join");
+    if (bc) bc.disabled = on;
+    if (bj) bj.disabled = on;
+  };
+
+  const hashColor = (s) => {
+    if (!s) return "#607d8b";
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffff;
+    return "hsl(" + (h % 360) + ",40%,40%)";
+  };
+
+  const initials = (name) => {
+    if (!name) return "?";
+    return (name.trim().split(/\s+/).map(w => w[0] || "").join("").toUpperCase().slice(0, 2)) || name[0].toUpperCase();
+  };
+
+  const updateAvatar = () => {
+    const name = $("inp-name").value;
+    const gh   = $("inp-github").value.trim();
+    const av   = $("profile-av");
+    if (!av) return;
+    av.style.background = hashColor(gh || name);
+    av.textContent = initials(name);
+  };
+
+  $("inp-name").addEventListener("input", updateAvatar);
+  $("inp-github").addEventListener("input", updateAvatar);
+
+  $("btn-gear").addEventListener("click", () => {
+    settingsOpen = !settingsOpen;
+    $("server-drawer").hidden = !settingsOpen;
+  });
+
+  $("btn-save-server").addEventListener("click", () => {
+    const url = $("inp-server").value.trim().replace(/\/+$/, "");
+    if (!url) { showErr("URL vazia"); return; }
+    hideErr();
+    sendMsg({ type: "set-server", url });
+  });
+
+  $("btn-ping").addEventListener("click", () => {
+    const pr = $("ping-result");
+    if (pr) { pr.hidden = false; pr.className = ""; pr.textContent = "testando..."; }
+    const url = $("inp-server").value.trim().replace(/\/+$/, "");
+    sendMsg({ type: "ping", url });
+  });
+
+  $("btn-create").addEventListener("click", () => {
+    const name   = $("inp-name").value.trim();
+    const github = $("inp-github").value.trim().replace(/^@/, "");
+    if (!name) { showErr("Informe seu nome."); return; }
+    hideErr();
+    setLoading(true, "Criando sala...");
+    sendMsg({ type: "create-room", name, github: github || null });
+  });
+
+  $("btn-join").addEventListener("click", () => {
+    const room_id = $("inp-room").value.trim();
+    const name    = $("inp-name").value.trim();
+    const github  = $("inp-github").value.trim().replace(/^@/, "");
+    if (!room_id) { showErr("Cole o Room ID."); return; }
+    if (!name)    { showErr("Informe seu nome."); return; }
+    hideErr();
+    setLoading(true, "Entrando...");
+    sendMsg({ type: "join-room", room_id, name, github: github || null });
+  });
+
+  $("btn-leave").addEventListener("click", () => {
+    sendMsg({ type: "leave-room" });
+  });
+
+  $("btn-copy-room").addEventListener("click", () => {
+    const val = $("room-id").textContent;
+    const btn = $("btn-copy-room");
+    const ok = () => { btn.textContent = "✓"; setTimeout(() => { btn.textContent = "⧸"; }, 1600); };
+    const failed = () => { btn.textContent = "Erro"; btn.title = "Não foi possível copiar o código."; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(val).then(ok, failed);
+    } else { failed(); }
+  });
+
+  const render = (state) => {
+    if (!state || !state.room_id) {
+      nc.hidden = false; app.hidden = true;
+      setLoading(false); return;
+    }
+    nc.hidden = true; app.hidden = false;
+    const ri = $("room-id"); if (ri) ri.textContent = state.room_id;
+    const sd = $("sync-dot"); if (sd) sd.className = state.sync_active ? "on" : "";
+    const sl = $("sync-label"); if (sl) sl.textContent = state.sync_active ? "Comunicação ativa" : "Sincronização pendente";
+    const cs = $("conn-server"); if (cs) cs.textContent = state.server_url ? "🌐 " + state.server_url : "";
+    const peers = state.peers || [];
+    const pl = $("peers");
+    if (pl) {
+      pl.innerHTML = "";
+      peers.forEach(p => {
+        const row = document.createElement("div"); row.className = "peer";
+        const av = document.createElement("div"); av.className = "peer-av";
+        av.style.background = hashColor(p.github || p.name || "");
+        av.textContent = initials(p.name);
+        const info = document.createElement("div");
+        const nm = document.createElement("div"); nm.className = "peer-name";
+        nm.textContent = p.name + (p.github ? " @" + p.github : "");
+        info.appendChild(nm);
+        if (p.file) {
+          const dt = document.createElement("div"); dt.className = "peer-detail";
+          dt.textContent = p.line != null ? p.file + ":" + (p.line + 1) : p.file;
+          info.appendChild(dt);
+        }
+        row.appendChild(av); row.appendChild(info); pl.appendChild(row);
+      });
+    }
+    const em = $("empty"); if (em) em.hidden = peers.length > 0;
+    setLoading(false);
+  };
+
+  openidea.onMessage((raw) => {
+    let m;
+    try { m = JSON.parse(raw); } catch { return; }
+    if (m.type === "state") { render(m.state); }
+    else if (m.type === "error") { showErr(m.message); setLoading(false); }
+    else if (m.type === "server-saved") {
+      const is = $("inp-server"); if (is) is.value = m.url;
+    } else if (m.type === "ping-result") {
+      const pr = $("ping-result");
+      if (pr) {
+        pr.className = "ping-result " + (m.ok ? "ping-ok" : "ping-err");
+        pr.textContent = m.ok ? "✓ " + m.ms + "ms (" + m.url + ")" : "✗ " + m.error;
+        pr.hidden = false;
+      }
+    }
+  });
+
+  // Boot
+  const bm = $("build-mode");
+  if (bm) { bm.textContent = IS_DEV ? "DEV" : "RELEASE"; bm.style.color = IS_DEV ? "#c48600" : "var(--accent)"; }
+  if (IS_DEV) { $("build-info").hidden = false; $("debug-details").hidden = false; }
+  const nb = $("nc-badge");
+  if (nb && IS_DEV) { nb.textContent = "DEV"; nb.className = "badge badge-dev"; }
+
+  updateAvatar();
+  dbg("=== panel init v__VERSION__ ===");
+  dbg("openidea=" + (typeof openidea));
+
+  setTimeout(() => { sendMsg({ type: "request-state" }); }, 50);
+})();
+</script>
