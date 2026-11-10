@@ -50,3 +50,27 @@ and concurrent producers with per-producer order preservation.
 No upstream PR, host release, deployed WSS endpoint or native editor integration
 is implied by this prototype. Billing/account access is being handled separately
 by the repository owner; local work does not depend on remote CI availability.
+
+## Native companion proof (experimental)
+
+`src/companion` is a native Rust WSS transport prototype. It pins the relay URL
+and subprotocol, validates system TLS roots, accepts bounded JSON-line commands
+on stdin and emits bounded events on stdout. The host/plugin can supervise it
+with the OpenIDEA `process.start` child handle. It deliberately has no filesystem
+API and never scans the project. Build with `cargo build --locked --release -p
+openidea-collab-companion`.
+
+This is not yet packaged or launched by the plugin. The manifest must declare a
+pinned `process:<binary>` capability and the user must approve it. The plugin
+must pass the member credential over the child's private stdin pipe, not argv or
+environment, poll child output without blocking its actor, and terminate it on
+leave, project switch, revoke, unload and shutdown. These lifecycle changes and
+cross-platform signed binaries remain prerequisites to distributing the helper.
+
+The helper supplies transport only; it does not observe documents or perform
+edits. No filesystem watcher or save polling is used. The current editor resource
+is obtained in an invocation/view context and provides versioned snapshot/edit
+operations, but the released API does not provide a continuous subscription for
+all documents/windows. The first reliable editor integration therefore requires
+the host document subscription API requested in issue #2532. Until then, do not
+claim end-to-end collaboration and do not enable remote writes.

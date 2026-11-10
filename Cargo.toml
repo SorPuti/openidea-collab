@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["src/protocol", "src/core", "src/relay", "src/plugin"]
+members = ["src/protocol", "src/core", "src/relay", "src/plugin", "src/companion"]
 
 [profile.dev]
 debug = 0

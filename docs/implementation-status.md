@@ -13,7 +13,8 @@ Target domain: **collab.synthosia.com**. Source version: plugin 0.3.0 (unrelease
 | Native plugin session preparation and keychain storage | Implemented with SDK mock tests |
 | No unsafe legacy upload/write activation | Implemented; old routes and automatic room restore removed |
 | Simple signed package installation | Packaging implemented; local official CLI validation required and recorded in validation results |
-| Native realtime without helper | Blocked on public host APIs; not claimed by this package |
+| Native realtime transport | Experimental native companion crate builds with pinned WSS/TLS; not yet launched by plugin or validated against live authenticated service |
+| Native document realtime | Blocked on host document subscriptions; no filesystem polling/watcher and no remote writes enabled |
 | Host API integration | Contract/proposed PR cuts documented; native events relate to upstream #466 (`needs-decision`); WSS request prepared but publishing was refused with integration 403. Bounded inbox prototype implemented/tested separately; background worker, public API and official release pending |
 | Relay process memory | Local 16-connection synthetic check measured about 7.6 MiB sampled RSS; TLS/IDE/internet/soak remain untested |
 | Optimized native CRDT hot path | Pending profiling/rework of full-state staging before integration |
