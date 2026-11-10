@@ -8,5 +8,6 @@ dist-release/
 openidea-plugins/
 .openidea/
 construtor/
-docs/
 tasks/
+
+__pycache__/

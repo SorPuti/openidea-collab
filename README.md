@@ -1,170 +1,54 @@
 # OpenIDEA Collab
 
-Real-time collaborative editing for [OpenIDEA](https://github.com/l0ng-ai/openidea) — sync files between developers (and AI agents) over HTTP long-poll without WebSockets.
+Experimental file collaboration plugin for [OpenIDEA](https://github.com/l0ng-ai/openidea), with a Rust/WASM plugin and a standalone HTTP server.
 
-![OpenIDEA Collab v0.2 — cursor decorations, GitHub avatars and presence panel](screenshots/demo.svg)
+**Status: not approved for marketplace listing.** The historical `v0.1.0` package has unresolved safety and provenance issues. The current source still needs sharing boundaries, project-bound sessions, participant authentication and reliable conflict recovery. See [security and data handling](docs/security.md) before running it.
 
-## Features
+## What works today
 
-- **Room-based sessions** — create or join a room with a simple ID
-- **File sync** — changes are pushed to all room members within ~500 ms
-- **Live cursor decorations** — see teammates' cursor positions as inline after-text annotations
-- **GitHub avatars** — connect a GitHub username for real profile photos in the panel
-- **File-tree badges** — open files get a `●` badge showing how many peers have them open
-- **Status bar** — room ID and peer count visible at the bottom of the editor at all times
-- **HTML presence panel** — animated sidebar showing all peers with avatars, files, and cursor positions
-- **Remote server** — configure any HTTP URL with *Collab: Set Server URL* (ngrok, Cloudflare Tunnel, etc.)
-- **3-way merge** — conflict detection; 409 returned on unresolvable conflicts
-- **AI-agent ready** — collab-server exposes a plain REST API any agent can call
+- Create, join and leave rooms.
+- Upload the full text of a saved file and retrieve remote file updates.
+- Display participant names, optional GitHub usernames, current files and cursor snapshots.
+- Reject some concurrent updates with HTTP 409. Automatic three-way merging is not integrated.
 
-## Architecture
+Remote changes are polled on scheduled events. The manifest requests a 60-second schedule; the server waits five seconds before rechecking an empty event stream. This is file synchronization on save, not character-by-character collaborative editing. No subsecond latency guarantee is made.
 
-```
-┌────────────────┐    HTTP long-poll     ┌──────────────────┐
-│  OpenIDEA IDE  │◄──────────────────────│  collab-server   │
-│  (plugin WASM) │──────────────────────►│  (axum / Tokio)  │
-└────────────────┘   POST /rooms/:id/…   └──────────────────┘
-```
+## Development quick start
 
-| Component | Description |
-|-----------|-------------|
-| `openidea-collab/` | Plugin (Rust → `wasm32-wasip2`) — commands, sync loop, presence panel |
-| `collab-server/` | Standalone HTTP server — rooms, events, presence, file store |
-| `scripts/` | Dev helpers (`dev-server.sh`, `dev-plugin.sh`) |
-| `.github/workflows/release.yml` | CI: build → pack → create GitHub Release |
+Use only disposable projects and synthetic data while the safety work remains open. The server currently binds to **all IPv4 interfaces** and has no participant authentication; isolate it from untrusted networks.
 
-## Quick start
-
-### 1. Run the server
-
-```bash
-# Install Rust if needed: https://rustup.rs
-cargo run --manifest-path collab-server/Cargo.toml
-# Server listens on http://localhost:4444
-```
-
-Environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `COLLAB_PORT` | `4444` | Listening port |
-| `RUST_LOG` | `info` | Log level |
-
-### 2. Build and install the plugin
-
-```bash
-# Install the OpenIDEA plugin CLI
-cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
-
-# Build
-cd openidea-collab
-openidea-plugin build        # output: dist/plugin.wasm
-
-# Install into OpenIDEA (dev link)
-openidea-plugin link .
-```
-
-### 3. (Optional) Set a remote server
-
-Run **Collab: Set Server URL** and enter your server's public URL.
-
-> **Cross-network**: `ngrok http 4444` gives you an HTTPS URL — paste it into *Set Server URL* on both machines.
-
-### 4. Start collaborating
-
-1. Open the **Collaborators** panel in the right sidebar.
-2. Run **Collab: Create Room** — enter your name and (optionally) GitHub username.
-3. Share the Room ID and server URL with your collaborator.
-4. On the other machine: run **Collab: Join Room**, enter the Room ID, name, and GitHub username.
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| **Collab: Create Room** | Create a new room, ask for name + GitHub username |
-| **Collab: Join Room** | Join an existing room by ID |
-| **Collab: Leave Room** | Leave the current room |
-| **Collab: Set Server URL** | Configure the collab-server endpoint |
-
-## REST API (collab-server)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/rooms` | Create room → `{"room_id": "…"}` |
-| `POST` | `/rooms/{id}/join` | Join room, get `member_id` |
-| `GET` | `/rooms/{id}/members` | List present members |
-| `POST` | `/rooms/{id}/members/{uid}/presence` | Update current file + cursor position |
-| `GET` | `/rooms/{id}/files/{*path}` | Get latest file text + version |
-| `POST` | `/rooms/{id}/files/{*path}` | Push file update (conflict → 409) |
-| `GET` | `/rooms/{id}/events?cursor=N` | Long-poll for new events (holds 5 s) |
-
-All endpoints return JSON. The `events` endpoint holds the connection open until an event arrives or the timeout expires.
-
-## Install
-
-### One-line installer (Linux · macOS)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/SorPuti/openidea-collab/master/install.sh | bash
-```
-
-The script:
-- Detects your OS (Fedora, Ubuntu/Debian, Arch, macOS)
-- Installs Rust via `rustup` if needed
-- Installs the `openidea-plugin` CLI
-- Builds and installs `collab-server` to `~/.local/bin/`
-- Builds the plugin from source (`wasm32-wasip2`) and registers it via `openidea-plugin link` (bypasses publisher verification — no marketplace approval required)
-- Registers a **systemd user service** (Linux) or **launchd agent** (macOS) so the server starts automatically on login
-- Restart OpenIDEA after the script finishes — the plugin loads automatically
-
-If already installed, running the script again **updates** the server and plugin, then restarts the service automatically.
-
-> Override defaults with env vars: `COLLAB_PORT=5000 COLLAB_INSTALL_DIR=/usr/local/bin curl … | bash`
-
-### From marketplace (once PR is merged)
-
-In **OpenIDEA → Settings → Plugins → Available**, search for `openidea-collab`.
-
-### Manual plugin install (dev link, no marketplace required)
-
-```bash
-# Install the plugin CLI
-cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin
-
-# Clone and build
+```sh
 git clone https://github.com/SorPuti/openidea-collab.git
 cd openidea-collab
-rustup target add wasm32-wasip2
+cargo run --locked --manifest-path collab-server/Cargo.toml
+```
+
+The default port is `4444`; set `COLLAB_PORT` to change it. `RUST_LOG` controls logging. Rooms, file contents and events are held in memory and disappear when the server stops.
+
+In a second terminal, install the CLI matching the SDK and build the plugin:
+
+```sh
+rustup toolchain install 1.96.0 --profile minimal
+cargo +1.96.0 install --locked --git https://github.com/l0ng-ai/openidea --tag v0.1.40 ide-host --bin openidea-plugin
 openidea-plugin build openidea-collab
 openidea-plugin link openidea-collab
 ```
 
-Restart OpenIDEA — the plugin loads automatically.
+Restart OpenIDEA. In a disposable project, use **Collab: Create Room** or **Collab: Join Room** and share the room ID with the second participant. **Collab: Leave Room** ends participation. **Collab: Set Server URL** changes the endpoint; the default is `http://localhost:4444`. Localhost and IPv4 loopback network permissions are declared. Other hosts need explicit manifest permissions and a development rebuild; arbitrary remote URLs are not supported by the default permissions.
 
-## Development
+Development linking bypasses publisher verification. It does not establish marketplace approval or resolve the safety issues. The legacy `install.sh` also installs services and can consume historical release assets; prefer the explicit development steps above during remediation.
 
-```bash
-# Run server with auto-reload (requires cargo-watch)
-cargo watch -x 'run --manifest-path collab-server/Cargo.toml'
+## Repository
 
-# Run server tests
-cargo test --manifest-path collab-server/Cargo.toml
+| Path | Purpose |
+| --- | --- |
+| `openidea-collab/` | WASM plugin, client, sync and presence panel |
+| `collab-server/` | Axum server, rooms and in-memory event/file stores |
+| `scripts/` | Development, validation and packaging helpers |
+| `docs/` | Architecture, data handling, manual validation and releases |
 
-# Rebuild plugin after code changes
-cd openidea-collab && openidea-plugin build
-```
-
-## Release
-
-Tag a version to trigger the GitHub Actions release workflow:
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-The workflow builds the plugin, packs it as `.oiplugin`, and creates a GitHub Release. Required secrets: `OPENIDEA_KEY` (PEM signing key content) and `OPENIDEA_PUBLISHER_ID` (`sorputi`).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks and contribution conventions, [architecture](docs/architecture.md) for the protocol, and [release instructions](docs/releasing.md) for packaging. [CHANGELOG.md](CHANGELOG.md) distinguishes source changes from published releases.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT; see [LICENSE](LICENSE). OpenIDEA SDK and CLI dependencies retain their own licenses and notices. See the [release instructions](docs/releasing.md) for the dependency-notice review required before distribution.
