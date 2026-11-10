@@ -109,6 +109,9 @@ pub(super) async fn create_invitation(
                 return Err(error(StatusCode::FORBIDDEN, "owner_required"));
             }
             let session = registry.metadata.sessions.get_mut(&session_id).unwrap();
+            if session.members.len() >= MAX_MEMBERS {
+                return Err(error(StatusCode::TOO_MANY_REQUESTS, "member_limit"));
+            }
             if session.invitations.len() >= MAX_INVITES {
                 return Err(error(StatusCode::TOO_MANY_REQUESTS, "invitation_limit"));
             }

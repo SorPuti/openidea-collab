@@ -105,7 +105,7 @@ impl Views for CollabPlugin {
         if let Some(invitation) = &self.invitation {
             fields.push(Field::new(
                 "invitation",
-                "Invitation (single use, expires in 5 minutes)",
+                "Invite one of up to two collaborators (single use, expires in 5 minutes)",
                 FieldValue::readonly_text(invitation, false),
             ));
         }

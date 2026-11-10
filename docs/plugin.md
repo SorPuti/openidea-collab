@@ -24,7 +24,7 @@ Install a reviewed, signed `.oiplugin` using Settings → Plugins. A collaborato
 - `storage`: nonsecret, versioned session metadata and local project identity hash.
 - `secrets`: one declared member credential in the IDE keychain.
 
-The session-control requests contain credentials/invitation secrets where required but no source files or absolute project paths. Installation/activation performs no network requests. Only explicit commands contact the relay. Invitation links must be treated as secrets, are single-use and expire after five minutes by default. The current package supports one prepared project session at a time.
+The session-control requests contain credentials/invitation secrets where required but no source files or absolute project paths. Installation/activation performs no network requests. Only explicit commands contact the relay. Invitation links must be treated as secrets, are single-use and expire after five minutes by default. Each room is capped server-side at three members total (owner plus at most two collaborators). The current package supports one prepared project session at a time.
 
 The relay operator can inspect network traffic after TLS termination; no E2EE is claimed. The service domain being configured in the package does not imply that a server is already deployed.
 

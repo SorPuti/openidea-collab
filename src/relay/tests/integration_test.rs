@@ -528,18 +528,50 @@ async fn client_supplied_identity_fields_are_refused() {
 }
 
 #[tokio::test]
-async fn room_has_three_members_and_refuses_fourth_invitee() {
+async fn room_has_three_members_and_refuses_extra_invites_and_members() {
     let server = Server::start(None).await;
     let owner = server.create().await;
-    let second = server.join(&owner, Role::Editor).await;
-    let third = server.join(&owner, Role::Viewer).await;
-    assert_ne!(owner.member_id, second.member_id);
-    assert_ne!(second.member_id, third.member_id);
+    let invitees = [
+        server.invite(&owner, Role::Editor).await,
+        server.invite(&owner, Role::Editor).await,
+        server.invite(&owner, Role::Viewer).await,
+    ];
+    let mut members = Vec::new();
+    for invitation in &invitees[..2] {
+        let redeem = Endpoint::parse(&server.origin)
+            .unwrap()
+            .parse_invitation(&invitation.url)
+            .unwrap();
+        let response = server
+            .http
+            .post(server.url("/v1/invitations/redeem"))
+            .json(&redeem)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        members.push(response.json::<SessionCredential>().await.unwrap());
+    }
+    assert_ne!(owner.member_id, members[0].member_id);
+    assert_ne!(members[0].member_id, members[1].member_id);
 
-    let invitation = server.invite(&owner, Role::Editor).await;
+    let full_room_invite = server
+        .http
+        .post(server.url(&format!("/v1/sessions/{}/invitations", owner.session_id)))
+        .bearer_auth(&owner.credential)
+        .json(&CreateInvite {
+            role: Role::Editor,
+            ttl_seconds: 300,
+        })
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(full_room_invite.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    // An invitation issued before the room filled cannot add a fourth member.
     let redeem = Endpoint::parse(&server.origin)
         .unwrap()
-        .parse_invitation(&invitation.url)
+        .parse_invitation(&invitees[2].url)
         .unwrap();
     let response = server
         .http
