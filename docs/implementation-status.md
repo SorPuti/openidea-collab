@@ -1,6 +1,6 @@
 # Implementation status
 
-Target domain: **collab.synthosia.com**. Source version: plugin 0.4.0 (unreleased), relay 0.2.0. On 2026-11-10 the live service returned `/healthz` 204, advertised protocol 1 at `/v1/info`, accepted two independently authenticated WSS clients and forwarded a registered-document binary frame between them. This is a short functional check, not a soak test or security audit. No signed release or marketplace entry was deployed by this work.
+Target domain: **collab.synthosia.com**. Source version: plugin 0.4.0 (unreleased), relay 0.2.0. On 2026-11-10 the live service returned `/healthz` 200, advertised protocol 1 at `/v1/info`, accepted two independently authenticated WSS clients and forwarded a registered-document binary frame between them. This is a short functional check, not a soak test or security audit. No signed release or marketplace entry was deployed by this work.
 
 | Workstream | Status |
 | --- | --- |
