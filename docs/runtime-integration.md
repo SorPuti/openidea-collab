@@ -1,6 +1,6 @@
 # Native runtime integration
 
-The native design is implemented across two repositories. [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) provides the generic API 1.5 WSS transport; draft [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610) adds explicit document subscriptions. This repository consumes both for collaboration. The API remains unreleased, so the plugin pins stacked fork commit `5cbb4b829c152d6e294278b46a6095fa89aa65fc` and is a development build until maintainers merge and release the host changes.
+The native design is implemented across two repositories. [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) provides the generic API 1.6 WSS transport; draft [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610) adds explicit document subscriptions. This repository consumes both for collaboration. The API remains unreleased, so the plugin pins stacked fork commit `fbbde4fb307558fb5fc99783f4824dccc9954f22` and is a development build until maintainers merge and release the host changes.
 
 ## Generic OpenIDEA layer
 

@@ -6,7 +6,7 @@ authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
 change-notes = "Experimental project-bound WSS collaboration with explicit document sharing and versioned editor updates."
 categories = ["tools"]
-engines.openidea = "^1.5"
+engines.openidea = "^1.6"
 wasm = "dist/plugin.wasm"
 activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready"]
 

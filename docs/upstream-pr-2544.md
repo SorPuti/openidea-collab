@@ -2,7 +2,7 @@ Relates to #2532.
 
 ## What and why
 
-Wasm plugins that consume realtime services currently have no bounded background transport. This adds a generic API 1.5 host surface for project-bound WebSocket connections, without document or collaboration semantics.
+Wasm plugins that consume realtime services currently have no bounded background transport. This adds a generic API 1.6 host surface for project-bound WebSocket connections, without document or collaboration semantics.
 
 The host owns the socket and separate bounded incoming/outgoing queues. It requires the endpoint's `net:<host>` capability, expands declared keychain secrets only in the `Authorization` header, requires WSS outside loopback and a negotiated subprotocol, and emits `websocket-ready` instead of requiring polling. Connection handles cannot cross plugin or project boundaries and are cleaned up on close, transport failure, plugin stop, or after an abandoned final drain. TLS reuses the backend's existing rustls client configuration with ring and the platform verifier; the WebSocket dependency does not select another crypto provider or trust-store implementation.
 

@@ -3,7 +3,7 @@ Implemented the TLS review note in `85b0639`.
 - WebSockets now receive the same `rustls::ClientConfig` used by the backend HTTP client: ring plus `rustls-platform-verifier`.
 - `tokio-tungstenite` no longer enables its native-roots feature and does not select another crypto provider.
 - The shared builder remains in `ide-http`, so HTTP and WebSocket trust behavior cannot drift independently.
-- #2610 was rebased on this change and remains draft/dependent at `5cbb4b8`.
+- #2610 was rebased on this change and remains draft/dependent at `fbbde4f`.
 
 Validation after the change:
 
