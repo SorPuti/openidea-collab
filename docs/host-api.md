@@ -1,6 +1,6 @@
 # OpenIDEA host integration
 
-The generic WSS transport is implemented in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544), while document subscriptions are separated on the stacked [`feat/plugin-document-subscriptions`](https://github.com/SorPuti/openidea/tree/feat/plugin-document-subscriptions) branch; both follow [issue #2532](https://github.com/l0ng-ai/openidea/issues/2532). They are open and unreleased. This plugin therefore pins the contributor fork commit `288b7b4417daf0cb7442adce1f477c90ca41a863`; that pin is suitable for development validation, not a marketplace release.
+The generic WSS transport is implemented in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544), while document subscriptions are separated into draft [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610); both follow [issue #2532](https://github.com/l0ng-ai/openidea/issues/2532). They are open and unreleased. This plugin therefore pins the contributor fork commit `5cbb4b829c152d6e294278b46a6095fa89aa65fc`; that pin is suitable for development validation, not a marketplace release.
 
 ## Public surface
 

@@ -8,7 +8,7 @@ The subscription boundary is deliberately narrow: project-relative path filters 
 
 The change includes the editor-to-plugin event bridge, WIT and Rust SDK APIs, mock-host behavior, generated TypeScript bindings, lifecycle cleanup, and documentation. It does not add a collaboration-specific protocol or relay policy.
 
-## Validation
+## How it was verified
 
 - `cargo test -p ide-plugin --lib` — 27 passed
 - `cargo test -p ide-host --lib plugins::websocket::tests` — 6 passed

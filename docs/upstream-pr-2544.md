@@ -10,7 +10,7 @@ Queue overflow explicitly rejects the new frame and closes the connection. It ne
 
 Document subscriptions are intentionally excluded from this PR and live on the stacked [`SorPuti:feat/plugin-document-subscriptions`](https://github.com/SorPuti/openidea/tree/feat/plugin-document-subscriptions) branch.
 
-## Validation
+## How it was verified
 
 Passed:
 
