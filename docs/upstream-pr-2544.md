@@ -4,7 +4,7 @@ Relates to #2532.
 
 Wasm plugins that consume realtime services currently have no bounded background transport. This adds a generic API 1.5 host surface for project-bound WebSocket connections, without document or collaboration semantics.
 
-The host owns the socket and separate bounded incoming/outgoing queues. It requires the endpoint's `net:<host>` capability, expands declared keychain secrets only in the `Authorization` header, requires WSS outside loopback and a negotiated subprotocol, and emits `websocket-ready` instead of requiring polling. Connection handles cannot cross plugin or project boundaries and are cleaned up on close, transport failure, plugin stop, or after an abandoned final drain.
+The host owns the socket and separate bounded incoming/outgoing queues. It requires the endpoint's `net:<host>` capability, expands declared keychain secrets only in the `Authorization` header, requires WSS outside loopback and a negotiated subprotocol, and emits `websocket-ready` instead of requiring polling. Connection handles cannot cross plugin or project boundaries and are cleaned up on close, transport failure, plugin stop, or after an abandoned final drain. TLS reuses the backend's existing rustls client configuration with ring and the platform verifier; the WebSocket dependency does not select another crypto provider or trust-store implementation.
 
 Queue overflow explicitly rejects the new frame and closes the connection. It never reports a refused frame as accepted and never grows retained memory without a bound. The Rust SDK and `MockHost` expose the same connect/send/drain/close lifecycle for downstream tests.
 
@@ -18,6 +18,7 @@ Passed:
 - `cargo test -p ide-host --lib` — 347 passed
 - `cargo test -p ide-host --lib plugins::network_inbox::tests` — 8 passed
 - `cargo test -p ide-host --lib plugins::websocket::tests` — 4 passed
+- `cargo test -p ide-http --lib` — 24 passed after sharing its TLS configuration with WebSockets
 - `cargo test --manifest-path sdk/rust/openidea-plugin/Cargo.toml` — 59 passed
 - `cargo clippy -p ide-host -p ide-plugin --all-targets --no-deps -- -D warnings -A clippy::nonminimal-bool` — passed; the single allowed lint is already present in untouched `main` files under Rust 1.96
 - `cargo fmt --all --check`
@@ -33,4 +34,4 @@ There are no user-visible UI changes. Relay authentication models, collaboration
 
 ## Review focus
 
-Please review the capability and project boundaries, bounded queue/refusal contract, readiness and close lifecycle, WIT compatibility, and SDK/host parity. The new `tokio-tungstenite` runtime dependency remains subject to maintainer approval.
+Please review the capability and project boundaries, bounded queue/refusal contract, readiness and close lifecycle, WIT compatibility, SDK/host parity, and reuse of the existing ring/platform-verifier TLS configuration. The maintainer approved the `tokio-tungstenite` runtime dependency in the PR conversation.
