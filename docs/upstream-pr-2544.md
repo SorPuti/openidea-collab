@@ -12,23 +12,26 @@ Document subscriptions are intentionally excluded from this PR and live on the s
 
 ## How it was verified
 
-Passed:
+Current API 1.6 update (`80150e0`):
 
-- `cargo test -p ide-plugin --lib` — 25 passed
+- `cargo test --manifest-path sdk/rust/openidea-plugin/Cargo.toml` — 61 passed; the API freeze test accepts the 1.6 additions and preserves the released 1.4 surface
+- `cargo test -p ide-extension -p ide-plugin --lib --tests` — 74 `ide-extension` and 25 `ide-plugin` unit tests passed; the compatibility test then identified the expected stale checked-in 1.5 components
+- rebuilt all 43 checked-in official/fixture components for API 1.6
+- `plugins/build.sh --check` — all 43 components and the Graphviz web page passed
+- `cargo fmt --all --check`
+- `pnpm format:check` — 2,629 files passed
+- `src/bindings.ts` was regenerated from the Linux CI export output that exposed the stale file
+
+Transport/TLS validation before the version-only update:
+
 - `cargo test -p ide-host --lib` — 347 passed
 - `cargo test -p ide-host --lib plugins::network_inbox::tests` — 8 passed
 - `cargo test -p ide-host --lib plugins::websocket::tests` — 4 passed
-- `cargo test -p ide-http --lib` — 24 passed after sharing its TLS configuration with WebSockets
-- `cargo test --manifest-path sdk/rust/openidea-plugin/Cargo.toml` — 59 passed
-- `cargo clippy -p ide-host -p ide-plugin --all-targets --no-deps -- -D warnings -A clippy::nonminimal-bool` — passed; the single allowed lint is already present in untouched `main` files under Rust 1.96
-- `cargo fmt --all --check`
+- `cargo test -p ide-http --lib` — 24 passed
+- `cargo clippy -p ide-host -p ide-plugin --all-targets --no-deps -- -D warnings -A clippy::nonminimal-bool` — passed; the allowed lint is pre-existing in untouched `main` files under Rust 1.96
 - `pnpm test` — 798 files and 9,741 tests passed; 6 skipped
 
-Also executed:
-
-- `cargo test -p ide-host -p ide-plugin` — both packages compiled; this 4.9 GiB runner exhausted `/dev/shm` while linking all `ide-host` integration binaries concurrently, so the package library suites above were run sequentially
-- `cargo clippy -p ide-host -p ide-plugin --all-targets -- -D warnings` — reached only pre-existing `clippy::nonminimal-bool` diagnostics in untouched `main` files; the scoped command above passed
-- `pnpm gen:bindings` — this runner lacks the GTK/WebKit system development packages required to compile the Tauri export test; the checked-in bindings match the split Rust types and the normal CI environment should regenerate/verify them
+The new GitHub Actions runs are waiting for the repository's fork-workflow approval.
 
 There are no user-visible UI changes. Relay authentication models, collaboration protocols, document ownership, and CRDT behavior remain downstream concerns.
 

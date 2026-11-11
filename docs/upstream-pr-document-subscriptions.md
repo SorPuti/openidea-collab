@@ -10,11 +10,17 @@ The change includes the editor-to-plugin event bridge, WIT and Rust SDK APIs, mo
 
 ## How it was verified
 
-- `cargo test -p ide-plugin --lib` — 27 passed
-- `cargo test -p ide-host --lib plugins::websocket::tests` — 6 passed
-- `cargo test --manifest-path sdk/rust/openidea-plugin/Cargo.toml --lib background_` — 2 passed
-- `pnpm exec vitest run src/editor/core/model/document.test.ts` — 27 passed
-- `pnpm test` — 798 files and 9,741 tests passed; 6 skipped
+After rebasing onto API 1.6 (`fbbde4f`):
+
+- `cargo test --manifest-path sdk/rust/openidea-plugin/Cargo.toml` — 62 passed, including document/WebSocket mock and API freeze/WIT coverage tests
+- `pnpm test --run src/editor/core/model/document.test.ts` — 27 passed
+- rebuilt all 43 checked-in official/fixture components; `plugins/build.sh --check` passed
+- downstream Collab's `src/tooling/check.sh` — 5 release-guard tests and 37 Rust tests passed; Clippy, formatting and the optimized `wasm32-wasip2` plugin build passed
 - `cargo fmt --all --check`
+- `pnpm format:check` — 2,629 files passed
+
+Before the version-only rebase, `cargo test -p ide-host --lib plugins::websocket::tests` passed all 6 transport/subscription tests and the complete frontend suite passed 9,741 tests in 798 files (6 skipped).
+
+The new GitHub Actions runs are waiting for the repository's fork-workflow approval.
 
 This is draft while #2544 and its `tokio-tungstenite` dependency are under review.
