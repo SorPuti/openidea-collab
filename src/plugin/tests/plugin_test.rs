@@ -169,10 +169,7 @@ fn document_change_flows_through_crdt_websocket_and_remote_edit_returns_to_edito
         socket.request.headers[0].1,
         format!("Bearer {}", "A".repeat(43))
     );
-    assert_eq!(
-        mock.path_subscriptions()["document-changed"],
-        ["src/main.rs"]
-    );
+    assert_eq!(socket.subscriptions, ["src/main.rs"]);
     let session = state::load().unwrap().unwrap();
     let document_id = session.documents[0].document_id;
     let snapshot = socket
@@ -222,7 +219,11 @@ fn document_change_flows_through_crdt_websocket_and_remote_edit_returns_to_edito
         .run_command("disconnect-realtime", &mock.invocation(), None)
         .unwrap();
     assert!(mock.websockets().iter().all(|candidate| candidate.closed));
-    assert!(mock.path_subscriptions()["document-changed"].is_empty());
+    assert!(
+        mock.path_subscriptions()
+            .get("document-changed")
+            .is_none_or(Vec::is_empty)
+    );
     plugin
         .run_command("connect-realtime", &mock.invocation(), None)
         .unwrap();

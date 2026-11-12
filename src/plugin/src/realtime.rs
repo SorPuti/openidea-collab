@@ -123,6 +123,7 @@ impl Realtime {
     pub fn remove_document(&mut self, shared: &SharedDocument) -> Result<(), Error> {
         if let Some(document) = self.documents.remove(&shared.document_id) {
             self.by_path.remove(&document.absolute);
+            self.socket.unsubscribe_document(&document.shared.path)?;
         }
         host::storage::delete(&checkpoint_key(self.session_id, shared.document_id))?;
         self.refresh_event_filter()
@@ -147,6 +148,7 @@ impl Realtime {
 
     fn load_document(&mut self, project: &Project, shared: SharedDocument) -> Result<(), Error> {
         validate_relative(&shared.path)?;
+        let subscription_path = shared.path.clone();
         let absolute = absolute_path(&self.root, &shared.path);
         let current = project.document(&absolute)?;
         if self.role == Role::Owner {
@@ -180,16 +182,14 @@ impl Realtime {
                 editor_version,
             },
         );
+        self.socket.subscribe_document(&subscription_path)?;
         Ok(())
     }
 
     fn refresh_event_filter(&self) -> Result<(), Error> {
-        let paths: Vec<_> = self
-            .documents
-            .values()
-            .map(|document| document.shared.path.as_str())
-            .collect();
-        host::subscribe_paths("document-changed", &paths)
+        // The host derives the editor event bridge from WebSocket document
+        // resources, avoiding a second independently scoped path filter.
+        Ok(())
     }
 
     fn announce(&self, project: &Project, document_id: Uuid) -> Result<(), Error> {
@@ -228,7 +228,7 @@ impl Realtime {
         payload: &[u8],
     ) -> Result<(), Error> {
         for frame in split(kind, document, target, message, payload).map_err(collab_error)? {
-            self.socket.send(project, &frame)?;
+            self.socket.send(&frame)?;
         }
         Ok(())
     }
@@ -337,7 +337,7 @@ impl Realtime {
 
     fn drain(&mut self, project: &Project) -> Result<bool, Error> {
         loop {
-            let batch = self.socket.drain(project, DRAIN_LIMIT)?;
+            let batch = self.socket.drain(DRAIN_LIMIT)?;
             let count = batch.messages.len();
             for message in batch.messages {
                 self.receive(project, &message)?;
