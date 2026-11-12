@@ -13,7 +13,11 @@ python3 src/tooling/verify-release.py --tag "$RELEASE_TAG"
 KEY_FILE="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$OPENIDEA_KEY_FILE")"
 VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("src/plugin/plugin.toml", "rb"))["version"])')"
 PACKAGE_FILE="sorputi.openidea-collab-${VERSION}.oiplugin"
-DIST_DIR="$ROOT/dist-release/$RELEASE_TAG"
+DIST_DIR="${COLLAB_DIST_DIR:-$ROOT/dist-release/$RELEASE_TAG}"
+case "$DIST_DIR" in
+    /*) ;;
+    *) DIST_DIR="$ROOT/$DIST_DIR" ;;
+esac
 [[ ! -e "$DIST_DIR" ]] || { echo "Output exists: $DIST_DIR; use a fresh checkout" >&2; exit 1; }
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
