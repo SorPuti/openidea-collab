@@ -30,7 +30,6 @@ impl Plugin for CollabPlugin {
     }
     fn deactivate(&mut self) {
         self.realtime = None;
-        let _ = host::subscribe_paths("document-changed", &[]);
     }
     fn run_command(
         &mut self,
@@ -162,7 +161,7 @@ impl CollabPlugin {
 
     fn disconnect(&mut self) -> Result<(), Error> {
         self.realtime = None;
-        host::subscribe_paths("document-changed", &[])
+        Ok(())
     }
 
     fn share_current(&mut self, ctx: &Invocation) -> Result<(), Error> {
@@ -242,7 +241,6 @@ impl CollabPlugin {
             && let Err(error) = runtime.remove_document(&shared)
         {
             self.realtime = None;
-            let _ = host::subscribe_paths("document-changed", &[]);
             return Err(error);
         }
         Ok(())

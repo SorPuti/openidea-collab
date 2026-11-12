@@ -137,7 +137,6 @@ impl Realtime {
                     if ready.connection == self.socket.id() && self.drain(project)? =>
                 {
                     self.status = "Disconnected by relay".into();
-                    host::subscribe_paths("document-changed", &[])?;
                     return Ok(false);
                 }
                 _ => {}
