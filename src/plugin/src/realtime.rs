@@ -21,6 +21,10 @@ use uuid::Uuid;
 const DRAIN_LIMIT: u32 = 32;
 const MAX_SHARED_DOCUMENTS: usize = 32;
 
+pub const fn max_shared_documents() -> usize {
+    MAX_SHARED_DOCUMENTS
+}
+
 struct LiveDocument {
     shared: SharedDocument,
     absolute: String,

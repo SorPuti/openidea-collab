@@ -1,10 +1,10 @@
 id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
-version = "0.4.0"
+version = "0.4.1"
 description = "Realtime collaboration for explicitly shared OpenIDEA documents through collab.synthosia.com."
 authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
-change-notes = "Experimental project-bound WSS collaboration with explicit document sharing and versioned editor updates."
+change-notes = "Experimental project-bound WSS collaboration with explicit document sharing, batched open-document consent and versioned editor updates."
 categories = ["tools"]
 engines.openidea = "^1.6"
 wasm = "dist/plugin.wasm"
@@ -51,6 +51,11 @@ category = "Collab"
 [[contributes.commands]]
 id = "share-current-document"
 title = "Collab: Share Current Document"
+category = "Collab"
+
+[[contributes.commands]]
+id = "share-open-documents"
+title = "Collab: Share All Open Documents"
 category = "Collab"
 
 [[contributes.commands]]

@@ -160,7 +160,7 @@ fn document_change_flows_through_crdt_websocket_and_remote_edit_returns_to_edito
         .unwrap();
     mock.answer_next_prompt(Some(&["yes"]));
     plugin
-        .run_command("share-current-document", &mock.invocation(), None)
+        .run_command("share-open-documents", &mock.invocation(), None)
         .unwrap();
 
     let socket = mock.websockets().remove(0);

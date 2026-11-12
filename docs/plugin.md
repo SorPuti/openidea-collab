@@ -11,11 +11,11 @@ Experimental realtime collaboration for the authenticated relay at **collab.synt
 - Bind prepared session metadata to the current project identity.
 - Store the member credential in the IDE's declared OS-keychain secret, never project files or plugin key-value storage.
 - Open one project-bound WSS connection through the IDE host.
-- Share only documents selected explicitly by each participant.
+- Share only documents selected explicitly by each participant. **Share All Open Documents** batches the currently open eligible editors behind one exact-path confirmation; it never scans or opens the project.
 - Forward committed UTF-16 document changes through a bounded CRDT protocol and apply remote text with version checks.
 - Persist project-bound checkpoints and pending updates in private plugin storage for recovery.
 
-The plugin does not subscribe to file-save events, scan the project, restore the old global room, launch a helper, or expose arbitrary filesystem writes. A document event subscription is installed only for the exact project-relative paths the user shared. The host refuses symlinks, VCS/IDE control paths and common secret files on every document read and remote apply.
+The plugin does not subscribe to file-save events, scan the project, restore the old global room, launch a helper, or expose arbitrary filesystem writes. A document event subscription is installed once for the exact project-relative paths the user shared, including an explicitly confirmed batch of currently open editors. The host refuses symlinks, VCS/IDE control paths and common secret files on every document read and remote apply.
 
 ## Installation
 

@@ -91,6 +91,7 @@ impl Plugin for CollabPlugin {
             "connect-realtime" => self.connect(ctx)?,
             "disconnect-realtime" => self.disconnect()?,
             "share-current-document" => self.share_current(ctx)?,
+            "share-open-documents" => self.share_open_documents(ctx)?,
             "stop-sharing-current-document" => self.stop_sharing_current(ctx)?,
             _ => return Err(Error::NotFound("Unknown collaboration action".into())),
         }
@@ -167,44 +168,102 @@ impl CollabPlugin {
     }
 
     fn share_current(&mut self, ctx: &Invocation) -> Result<(), Error> {
+        let editor = ctx
+            .editor()
+            .ok_or_else(|| Error::Invalid("Focus the document you want to share".into()))?;
+        self.share_paths(ctx, vec![editor.path()], "Share document")
+    }
+
+    /// Shares only eligible documents already opened by the user. This never
+    /// scans or opens project files, keeping consent and host path checks intact.
+    fn share_open_documents(&mut self, ctx: &Invocation) -> Result<(), Error> {
+        let paths = host::open_editors()?
+            .into_iter()
+            .map(|editor| editor.path)
+            .collect();
+        self.share_paths(ctx, paths, "Share open documents")
+    }
+
+    fn share_paths(
+        &mut self,
+        ctx: &Invocation,
+        paths: Vec<String>,
+        title: &str,
+    ) -> Result<(), Error> {
         self.connect(ctx)?;
         let project = ctx
             .project()
             .ok_or_else(|| Error::Invalid("Open the session project first".into()))?;
-        let editor = ctx
-            .editor()
-            .ok_or_else(|| Error::Invalid("Focus the document you want to share".into()))?;
         let mut session = state::for_project(ctx)?
             .ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
-        let shared = realtime::shared_document(&project, &editor.path(), session.session_id)?;
-        if session
-            .documents
-            .iter()
-            .any(|document| document.document_id == shared.document_id)
-        {
-            return Err(Error::Invalid("This document is already shared".into()));
+        let mut pending = Vec::new();
+        for path in paths {
+            let Ok(shared) = realtime::shared_document(&project, &path, session.session_id) else {
+                continue;
+            };
+            if !session
+                .documents
+                .iter()
+                .any(|document| document.document_id == shared.document_id)
+                && !pending.iter().any(|document: &state::SharedDocument| {
+                    document.document_id == shared.document_id
+                })
+            {
+                pending.push(shared);
+            }
+        }
+        if pending.is_empty() {
+            return Err(Error::Invalid(
+                "No additional eligible open documents to share".into(),
+            ));
+        }
+        let limit = realtime::max_shared_documents();
+        if session.documents.len() + pending.len() > limit {
+            return Err(Error::Invalid(format!(
+                "Sharing these documents exceeds the session limit of {limit}; stop sharing some documents first"
+            )));
         }
         if !host::confirm(
-            "Share document",
+            title,
             &format!(
-                "Share {} with up to two authenticated collaborators? Its unsaved editor text and later edits will be transmitted through {DEFAULT_ORIGIN}.",
-                shared.path
+                "Share these {} document(s) with up to two authenticated collaborators? Their unsaved editor text and later edits will be transmitted through {DEFAULT_ORIGIN}.\n\n{}",
+                pending.len(),
+                pending
+                    .iter()
+                    .map(|document| document.path.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
             ),
         )? {
             return Ok(());
         }
-        self.realtime
-            .as_mut()
-            .expect("connected above")
-            .add_document(&project, shared.clone())?;
-        session.documents.push(shared);
+        let mut added = Vec::new();
+        for shared in pending {
+            if let Err(error) = self
+                .realtime
+                .as_mut()
+                .expect("connected above")
+                .add_document(&project, shared.clone())
+            {
+                for shared in added.iter().rev() {
+                    let _ = self
+                        .realtime
+                        .as_mut()
+                        .expect("connected above")
+                        .remove_document(shared);
+                }
+                return Err(error);
+            }
+            added.push(shared);
+        }
+        session.documents.extend(added.iter().cloned());
         if let Err(error) = state::store(&session) {
-            if let Some(shared) = session.documents.pop() {
+            for shared in added.iter().rev() {
                 let _ = self
                     .realtime
                     .as_mut()
                     .expect("connected above")
-                    .remove_document(&shared);
+                    .remove_document(shared);
             }
             return Err(error);
         }
@@ -310,6 +369,10 @@ impl Views for CollabPlugin {
                     page = page
                         .button(
                             Button::new("share-current-document", "Share Current Document")
+                                .icon("add"),
+                        )
+                        .button(
+                            Button::new("share-open-documents", "Share All Open Documents")
                                 .icon("add"),
                         )
                         .button(
