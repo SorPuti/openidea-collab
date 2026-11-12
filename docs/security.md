@@ -15,7 +15,7 @@ The plugin asks only for the configured HTTPS origin, project read (root identit
 - Explicit file scope preview, ignore handling, secret exclusions, safe bootstrap and conflicts before sending project content.
 - Real IDE installation, project-switch, refusal, revocation, offline/restart, undo and two-client tests.
 - Client core resource/fuzz/performance testing, independent security review and complete third-party notices.
-- Operator authentication/admission and abuse policy for public session creation. The global cap protects memory but does not prevent an attacker occupying the small instance's room quota. Do not expose a public anonymous service as production-ready on this basis.
+- An independent security review and a documented operator abuse-response process. Public creation is now gated by an operator-issued admission token, but this is not a substitute for identity verification, rate limiting at the proxy or incident response.
 - Real TLS/proxy deployment, certificate/timeout tests, platform matrix, signed release and registry approval.
 
 ## Operational boundaries
@@ -24,4 +24,4 @@ Use a dedicated owner-only metadata directory and a nonprivileged service accoun
 
 A slow peer is disconnected rather than buffered indefinitely. No document cache means a new peer needs another authorized peer with a copy; a session URL is not backup storage. Authentication does not make remote source code trustworthy. This product neither executes it nor shares terminals or build permissions.
 
-Report issues through [SECURITY.md](../SECURITY.md). Historical tag v0.1.0 remains unchanged and is not a verified candidate.
+Report issues through [SECURITY.md](../SECURITY.md). Historical tag v0.1.0 is withdrawn from the marketplace registry and must not be installed.

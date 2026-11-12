@@ -7,6 +7,7 @@ use openidea_plugin::{Error, HttpRequest, host};
 use serde::{Serialize, de::DeserializeOwned};
 
 pub const SECRET: &str = "member-credential";
+pub const ADMISSION_SECRET: &str = "relay-admission";
 pub fn relay_origin() -> Result<String, Error> {
     let origin = host::setting_string("relayOrigin").unwrap_or_else(|| DEFAULT_ORIGIN.into());
     Ok(Endpoint::parse(&origin)
@@ -19,6 +20,7 @@ fn request(
     path: &str,
     body: Option<Vec<u8>>,
     authenticated: bool,
+    admission: bool,
 ) -> Result<Vec<u8>, Error> {
     let endpoint = Endpoint::parse(origin).map_err(|e| Error::Invalid(e.into()))?;
     let mut req = HttpRequest {
@@ -32,6 +34,9 @@ fn request(
     .header("accept", "application/json");
     if authenticated {
         req = req.header("authorization", "Bearer {{secret:member-credential}}");
+    }
+    if admission && host::secret_is_set(ADMISSION_SECRET) {
+        req = req.header("x-collab-admission", "{{secret:relay-admission}}");
     }
     let response = host::fetch(&req)?;
     if method == "DELETE" && response.status == 401 {
@@ -54,10 +59,11 @@ fn post<T: DeserializeOwned>(
     path: &str,
     body: &impl Serialize,
     auth: bool,
+    admission: bool,
 ) -> Result<T, Error> {
     let body = serde_json::to_vec(body)
         .map_err(|_| Error::Invalid("Could not encode relay request".into()))?;
-    serde_json::from_slice(&request(origin, "POST", path, Some(body), auth)?)
+    serde_json::from_slice(&request(origin, "POST", path, Some(body), auth, admission)?)
         .map_err(|_| Error::Invalid("Invalid relay response".into()))
 }
 fn validate(origin: &str, credential: SessionCredential) -> Result<SessionCredential, Error> {
@@ -81,6 +87,7 @@ pub fn create(origin: &str) -> Result<SessionCredential, Error> {
             "/v1/sessions",
             &CreateSession { protocol: VERSION },
             false,
+            true,
         )?,
     )
 }
@@ -91,7 +98,7 @@ pub fn join(origin: &str, invitation: &str) -> Result<SessionCredential, Error> 
         .map_err(|e| Error::Invalid(e.into()))?;
     validate(
         origin,
-        post(origin, "/v1/invitations/redeem", &redeem, false)?,
+        post(origin, "/v1/invitations/redeem", &redeem, false, false)?,
     )
 }
 pub fn invite(origin: &str, session: &str) -> Result<Invite, Error> {
@@ -103,6 +110,7 @@ pub fn invite(origin: &str, session: &str) -> Result<Invite, Error> {
             ttl_seconds: 300,
         },
         true,
+        false,
     )?;
     Endpoint::parse(origin)
         .map_err(|e| Error::Invalid(e.into()))?
@@ -124,6 +132,7 @@ pub fn register_document(
                 .map_err(|_| Error::Invalid("Could not encode document registration".into()))?,
         ),
         true,
+        false,
     )
     .map(drop)
 }
@@ -134,6 +143,7 @@ pub fn leave(origin: &str, session: &str, member: &str) -> Result<(), Error> {
         &format!("/v1/sessions/{session}/members/{member}"),
         None,
         true,
+        false,
     )
     .map(drop)
 }

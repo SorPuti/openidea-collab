@@ -11,6 +11,8 @@ StateDirectoryMode=0700
 Environment=COLLAB_BIND=127.0.0.1:4444
 Environment=COLLAB_PUBLIC_ORIGIN=https://collab.synthosia.com
 Environment=COLLAB_STATE_FILE=/var/lib/openidea-collab/metadata.json
+# Root-owned, mode 0600: COLLAB_ADMISSION_TOKEN=<high-entropy value>
+EnvironmentFile=/etc/openidea-collab/admission.env
 ExecStart=/usr/local/bin/collab-server
 Restart=on-failure
 RestartSec=3

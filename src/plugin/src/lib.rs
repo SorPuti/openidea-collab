@@ -53,6 +53,17 @@ impl Plugin for CollabPlugin {
                 }
                 let relay = client::relay_origin()?;
                 let credential = if id == "create-session" {
+                    if !host::secret_is_set(client::ADMISSION_SECRET) {
+                        if let Some(token) = host::input(
+                            "Relay admission token (leave blank if the relay permits open creation)",
+                            None,
+                        )? {
+                            let token = token.trim();
+                            if !token.is_empty() {
+                                host::secret_set(client::ADMISSION_SECRET, token)?;
+                            }
+                        }
+                    }
                     client::create(&relay)?
                 } else {
                     let Some(invitation) = host::input("Paste the invitation URL", None)? else {

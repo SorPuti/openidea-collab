@@ -107,7 +107,7 @@ fn declined_consent_and_unexpected_invitation_hosts_do_not_send_requests() {
 #[test]
 fn already_revoked_membership_can_be_forgotten_without_retaining_credentials() {
     let mock = mock();
-    state::save(&mock.invocation(), serde_json::from_value(json!({
+    state::save(&mock.invocation(), "https://collab.synthosia.com".into(), serde_json::from_value(json!({
         "session_id":"11111111-1111-4111-8111-111111111111", "member_id":"22222222-2222-4222-8222-222222222222",
         "credential":"A".repeat(43), "role":"owner", "expires_at":9999999999u64,
         "websocket_url":"wss://collab.synthosia.com/v1/socket"
@@ -149,7 +149,12 @@ fn document_change_flows_through_crdt_websocket_and_remote_edit_returns_to_edito
         "websocket_url":"wss://collab.synthosia.com/v1/socket"
     }))
     .unwrap();
-    state::save(&mock.invocation(), credential).unwrap();
+    state::save(
+        &mock.invocation(),
+        "https://collab.synthosia.com".into(),
+        credential,
+    )
+    .unwrap();
 
     let mut plugin = CollabPlugin::default();
     plugin
@@ -282,7 +287,12 @@ fn differing_initial_content_is_preserved_without_acknowledging_remote_snapshot(
         "websocket_url":"wss://collab.synthosia.com/v1/socket"
     }))
     .unwrap();
-    state::save(&mock.invocation(), credential).unwrap();
+    state::save(
+        &mock.invocation(),
+        "https://collab.synthosia.com".into(),
+        credential,
+    )
+    .unwrap();
     let mut plugin = CollabPlugin::default();
     plugin
         .activate(&mock.context("sorputi.openidea-collab"))

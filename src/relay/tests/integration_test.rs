@@ -21,9 +21,12 @@ struct Server {
 }
 impl Server {
     async fn start(state: Option<PathBuf>) -> Self {
+        Self::start_with_admission(state, None).await
+    }
+    async fn start_with_admission(state: Option<PathBuf>, admission: Option<&str>) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("http://{}", listener.local_addr().unwrap());
-        let relay = Relay::new(&origin, state).unwrap();
+        let relay = Relay::with_admission(&origin, state, admission).unwrap();
         let task =
             tokio::spawn(async move { axum::serve(listener, relay.router()).await.unwrap() });
         let http = Client::builder()
@@ -104,6 +107,51 @@ impl Server {
             .insert("sec-websocket-protocol", SUBPROTOCOL.parse().unwrap());
         connect_async(request).await.unwrap().0
     }
+}
+
+#[tokio::test]
+async fn admission_token_is_required_for_room_creation_and_never_authorizes_other_routes() {
+    let server = Server::start_with_admission(None, Some("operator-only-token")).await;
+    let request = || {
+        server
+            .http
+            .post(server.url("/v1/sessions"))
+            .json(&json!({"protocol":1}))
+    };
+    assert_eq!(
+        request().send().await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        request()
+            .header("x-collab-admission", "wrong-token")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let response = request()
+        .header("x-collab-admission", "operator-only-token")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    // Admission only creates a room; all room mutations still require the
+    // per-member credential returned by that successful creation.
+    let owner: SessionCredential = response.json().await.unwrap();
+    assert_eq!(
+        server
+            .http
+            .post(server.url(&format!("/v1/sessions/{}/documents", owner.session_id)))
+            .header("x-collab-admission", "operator-only-token")
+            .json(&json!({"document_id": Uuid::new_v4()}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
 }
 impl Drop for Server {
     fn drop(&mut self) {

@@ -21,6 +21,17 @@ openidea-plugin link target/plugin-package
 
 This stages the WASM, manifest, translations, root LICENSE/NOTICE and package README outside `src/`. Linking is development-only and bypasses publisher verification.
 
+### Self-hosted development package
+
+The reviewed marketplace package is deliberately restricted by its `net:collab.synthosia.com` capability. A setting alone cannot safely grant a package permission to contact arbitrary domains. To link a development package for one self-hosted relay, build it with that exact DNS hostname:
+
+```sh
+COLLAB_RELAY_HOST=collab.example.org ./src/tooling/package-dev.sh
+openidea-plugin link target/plugin-package
+```
+
+Then set **OpenIDEA Collab → Relay origin** to `https://collab.example.org`. The hostname in the setting must match the package capability. This does not run a local executable from the plugin; run `collab-server` as a separately managed loopback service behind TLS, as described in [operations](operations.md). A signed self-hosted distribution needs its own reviewed manifest and publisher process.
+
 ## Operators
 
 Only the relay operator installs a server and TLS proxy. See [operations.md](operations.md). The public domain currently serves the protocol; operators still own monitoring, admission controls and incident response.

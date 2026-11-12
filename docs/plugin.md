@@ -1,6 +1,6 @@
 # OpenIDEA Collab
 
-Experimental realtime collaboration for the authenticated relay at **collab.synthosia.com**. This package is not approved for marketplace listing and requires OpenIDEA v0.1.43 or newer (API 1.6).
+Experimental realtime collaboration for **collab.synthosia.com**, operated by Synthosia. The relay is required for collaboration: if it is unavailable, realtime sharing stops. Requires OpenIDEA v0.1.43 or newer (API 1.6).
 
 ## What this package does
 
@@ -28,9 +28,9 @@ Install a reviewed, signed `.oiplugin` using Settings → Plugins. A collaborato
 - `editor.write`: apply a remote merged result through a versioned editor transaction; stale versions change nothing.
 - `events`: receive changes only for the exact shared path filters and host WebSocket readiness.
 - `storage`: nonsecret session metadata, project identity, shared path list and CRDT recovery checkpoints.
-- `secrets`: one declared member credential in the IDE keychain.
+- `secrets`: a member credential and, when required by the relay operator, a room-creation admission token in the IDE keychain.
 
-The session-control requests contain credentials/invitation secrets where required but no source text or absolute project paths. Source text is sent only as bounded binary CRDT updates after **Share Current Document** confirmation. Installation/activation performs no network requests. Invitation links must be treated as secrets, are single-use and expire after five minutes by default. Each room is capped server-side at three members total (owner plus at most two collaborators). The current package supports one prepared project session and at most 32 explicitly shared documents at a time.
+The session-control requests contain credentials/invitation secrets where required but no source text or absolute project paths. A relay may require an operator-issued admission token to create a room; it is sent only to `POST /v1/sessions` and does not authorize sockets, documents or invitations. Source text is sent only as bounded binary CRDT updates after **Share Current Document** confirmation. Installation/activation performs no network requests. Invitation links must be treated as secrets, are single-use and expire after five minutes by default. Each room is capped server-side at three members total (owner plus at most two collaborators). The current package supports one prepared project session and at most 32 explicitly shared documents at a time.
 
 The relay operator can inspect transient traffic after TLS termination; no E2EE is claimed. The relay stores authorization/document IDs but does not persist content. A slow client is disconnected rather than allowed to grow an unbounded queue; reconnect performs state-vector synchronization with an online peer.
 

@@ -59,6 +59,9 @@ struct Inner {
     failed: AtomicBool,
     requests: Arc<Semaphore>,
     metadata_writer: Arc<Semaphore>,
+    /// SHA-256 of the operator-issued admission token.  The bearer token itself
+    /// is never retained after startup or written to the state file.
+    admission: Option<[u8; 32]>,
 }
 struct Registry {
     metadata: Metadata,
@@ -147,6 +150,23 @@ fn bearer(headers: &HeaderMap) -> ApiResult<[u8; 32]> {
         .ok_or(error(StatusCode::UNAUTHORIZED, "authentication_required"))?;
     Ok(hash(value))
 }
+impl Relay {
+    fn require_admission(&self, headers: &HeaderMap) -> ApiResult<()> {
+        let Some(expected) = self.inner.admission else {
+            return Ok(());
+        };
+        let supplied = headers
+            .get("x-collab-admission")
+            .and_then(|value| value.to_str().ok())
+            .filter(|value| !value.is_empty() && value.len() <= 256)
+            .ok_or(error(StatusCode::UNAUTHORIZED, "admission_required"))?;
+        if bool::from(hash(supplied).ct_eq(&expected)) {
+            Ok(())
+        } else {
+            Err(error(StatusCode::UNAUTHORIZED, "admission_required"))
+        }
+    }
+}
 impl Metadata {
     fn authenticate(&self, digest: &[u8; 32]) -> ApiResult<Principal> {
         for (session_id, session) in &self.sessions {
@@ -187,7 +207,27 @@ impl Metadata {
 impl Relay {
     /// `None` means ephemeral authorization metadata. Documents are never persisted.
     pub fn new(origin: &str, state_file: Option<PathBuf>) -> Result<Self, String> {
+        Self::with_admission(origin, state_file, None)
+    }
+
+    /// Creates a relay with an optional operator admission token for new rooms.
+    /// Public deployments should always supply one; loopback development may
+    /// deliberately omit it.
+    pub fn with_admission(
+        origin: &str,
+        state_file: Option<PathBuf>,
+        admission_token: Option<&str>,
+    ) -> Result<Self, String> {
         let endpoint = Endpoint::parse(origin).map_err(str::to_owned)?;
+        if !endpoint.is_loopback() && admission_token.is_none() {
+            return Err("public relay requires COLLAB_ADMISSION_TOKEN".into());
+        }
+        let admission = admission_token
+            .map(str::trim)
+            .filter(|token| !token.is_empty());
+        if admission_token.is_some() && admission.is_none() {
+            return Err("COLLAB_ADMISSION_TOKEN must not be empty".into());
+        }
         let mut metadata = match &state_file {
             Some(path) => load_metadata(path)?,
             None => Metadata {
@@ -209,6 +249,7 @@ impl Relay {
                 failed: AtomicBool::new(false),
                 requests: Arc::new(Semaphore::new(32)),
                 metadata_writer: Arc::new(Semaphore::new(1)),
+                admission: admission.map(hash),
             }),
         })
     }

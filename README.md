@@ -2,13 +2,13 @@
 
 Open-source collaboration for [OpenIDEA](https://github.com/l0ng-ai/openidea), using a small authenticated relay at **collab.synthosia.com**. MIT licensed.
 
-**Status:** the relay, authenticated WSS forwarding and an experimental native realtime plugin are implemented. The plugin uses OpenIDEA's released API 1.6 from [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43): generic project-bound WebSockets plus versioned document events and edits. The source is not yet an approved marketplace release; it still needs the signed 0.4.0 artifact and marketplace re-review.
+**Status:** the relay, authenticated WSS forwarding and an experimental native realtime plugin are implemented. The plugin uses OpenIDEA's released API 1.6 from [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43): generic project-bound WebSockets plus versioned document events and edits. The signed 0.4.0 package is under marketplace review; install it only from the marketplace entry once that review is complete.
 
 ## Install as a collaborator
 
 The intended distribution is one signed `.oiplugin` installed through **Settings → Plugins**. No Rust, server, tunnel, VPN or native helper is required on the collaborator's machine. In OpenIDEA v0.1.43 or newer, install the package, prepare or join a session, connect realtime, focus a document and choose **Share Current Document**. Every participant explicitly selects the same project-relative document; no project scan or automatic whole-project sharing occurs.
 
-The plugin uses `https://collab.synthosia.com` for session control. Invitations contain a temporary, single-use secret in the URL fragment. Realtime transport is **WSS**, terminated by the operator's TLS reverse proxy; the Rust relay binds to loopback. HTTPS and WSS serve different parts of the same protocol.
+The default plugin connects to `https://collab.synthosia.com`, operated by Synthosia. If that relay is unavailable, collaboration stops until it is reachable again; it is not a backup or offline sync service. Invitations contain a temporary, single-use secret in the URL fragment. Realtime transport is **WSS**, terminated by the operator's TLS reverse proxy; the Rust relay binds to loopback. HTTPS and WSS serve different parts of the same protocol.
 
 ## Repository layout
 
@@ -40,7 +40,7 @@ To run the relay locally:
 cargo run --locked -p collab-server
 ```
 
-Defaults: `127.0.0.1:4444`, public origin `https://collab.synthosia.com`, private authorization metadata in `./collab-state/metadata.json`. Documents, updates and credentials in plaintext are not written to that file. Use a dedicated state directory. The public domain serves HTTPS/WSS; production monitoring, admission policy and an independent security review remain operator work. See [operations](docs/operations.md).
+Defaults: `127.0.0.1:4444`, public origin `https://collab.synthosia.com`, private authorization metadata in `./collab-state/metadata.json`. Documents, updates and credentials in plaintext are not written to that file. Use a dedicated state directory. A non-loopback public origin requires `COLLAB_ADMISSION_TOKEN`; the creator enters the corresponding token into the IDE keychain when preparing a session. See [operations](docs/operations.md).
 
 To build a development plugin package with the official v0.1.43 CLI:
 

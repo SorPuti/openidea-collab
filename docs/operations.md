@@ -4,7 +4,7 @@ This repository provides code/configuration, not a deployed service. The target 
 
 ## Small-host setup
 
-Build `cargo build --locked --release -p collab-server` and install that binary on the operator's Linux server. `deploy/openidea-collab.service` is an example hardened systemd unit; create the dedicated `openidea-collab` service account first and review paths, platform support and budgets before installing it. The state directory must be a real owner-only directory, not a symlink (including a DynamicUser private-state symlink). `deploy/Caddyfile` terminates HTTPS/WSS and forwards to loopback. Do not add access logs containing invitation bodies, Authorization or socket payloads.
+Build `cargo build --locked --release -p collab-server` and install that binary on the operator's Linux server. `deploy/openidea-collab.service` is an example hardened systemd unit; create the dedicated `openidea-collab` service account first and review paths, platform support and budgets before installing it. The state directory must be a real owner-only directory, not a symlink (including a DynamicUser private-state symlink). `deploy/Caddyfile` terminates HTTPS/WSS and forwards to loopback. Do not add access logs containing invitation bodies, Authorization, `X-Collab-Admission` or socket payloads. The plugin never starts a relay executable: process execution would add an unnecessary local-code-execution capability and is intentionally excluded.
 
 Configuration:
 
@@ -13,6 +13,7 @@ Configuration:
 | `COLLAB_BIND` | `127.0.0.1:4444`; non-loopback addresses are refused |
 | `COLLAB_PUBLIC_ORIGIN` | `https://collab.synthosia.com`; HTTPS outside loopback |
 | `COLLAB_STATE_FILE` | `./collab-state/metadata.json`; use a dedicated owner-only parent |
+| `COLLAB_ADMISSION_TOKEN` | required when `COLLAB_PUBLIC_ORIGIN` is not loopback; high-entropy token authorizing only `POST /v1/sessions` |
 
 The program uses one async I/O worker. Authorization metadata fsync runs outside that worker without holding the forwarding registry lock, with one write in flight; the executable caps blocking threads at two. Document data requires no disk writes, database or CRDT work. Queue/rate/session limits are defined in the protocol and source; changing them requires measurement, not just increasing defaults after overload. TLS proxy memory must be budgeted separately from the relay process.
 
@@ -26,7 +27,11 @@ Atomic metadata replacement includes file and directory fsync on Unix. A metadat
 
 ## Public exposure gate
 
-The default public creation route is bounded globally, not an antiabuse identity system. Add an operator-approved admission/rate policy before exposing it to untrusted users. Test TLS certificates, WSS upgrade, idle timeouts, revocation, blocked/slow clients, restart and quotas. No automatic room scaling, cluster or permanent free hosting is implied.
+For a public origin the relay fails closed unless `COLLAB_ADMISSION_TOKEN` is set. Generate a distinct high-entropy token (`openssl rand -base64 32`), inject it through the service manager's protected environment/credential facility, and distribute it only to approved session creators. The plugin stores an entered token as `relay-admission` in the IDE keychain and sends it only as `X-Collab-Admission` on room creation. The relay retains only its SHA-256 digest and the token cannot authorize invitations, documents, sockets or member removal. Rotate it by replacing the service credential and restarting the relay; existing rooms remain governed by their independent per-member credentials.
+
+The supplied systemd unit reads `/etc/openidea-collab/admission.env`; create it as root with mode `0600` and exactly `COLLAB_ADMISSION_TOKEN=<generated value>`. Do not place that value in the unit, a repository, reverse-proxy configuration, logs or an invitation.
+
+This is admission control, not an identity, billing or abuse-reporting system. Keep the global rate/session caps, rate-limit at the reverse proxy, monitor creation failures and revoke leaked admission tokens. Test TLS certificates, WSS upgrade, idle timeouts, revocation, blocked/slow clients, restart and quotas. No automatic room scaling, cluster or permanent free hosting is implied.
 
 A candidate memory budget is 64 MiB RSS for the relay process at its sixteen-connection cap. The example systemd hard limit is 96 MiB to allow headroom; both are targets until measured. Measure Caddy and total host usage separately. A local forwarding benchmark is not an IDE latency benchmark.
 

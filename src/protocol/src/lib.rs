@@ -98,6 +98,10 @@ impl Endpoint {
     pub fn origin(&self) -> String {
         self.0.origin().ascii_serialization()
     }
+    /// Whether this endpoint is an explicitly local development endpoint.
+    pub fn is_loopback(&self) -> bool {
+        matches!(self.0.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
+    }
     pub fn api(&self, path: &str) -> String {
         format!("{}{path}", self.origin())
     }

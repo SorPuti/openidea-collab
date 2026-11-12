@@ -22,6 +22,11 @@ name = "member-credential"
 label = "Collaboration member credential"
 description = "Stored automatically for one explicitly prepared project/session; never saved in project files."
 
+[[contributes.secrets]]
+name = "relay-admission"
+label = "Relay admission token"
+description = "Optional operator-issued token used only to create a session. Stored in the IDE keychain, never in project files."
+
 [[contributes.commands]]
 id = "create-session"
 title = "Collab: Prepare Session"

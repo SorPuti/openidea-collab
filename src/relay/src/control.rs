@@ -40,8 +40,10 @@ pub(super) async fn info(State(relay): State<Relay>) -> Json<ServiceInfo> {
 }
 pub(super) async fn create_session(
     State(relay): State<Relay>,
+    headers: HeaderMap,
     Json(body): Json<CreateSession>,
 ) -> ApiResult<(StatusCode, Json<SessionCredential>)> {
+    relay.require_admission(&headers)?;
     if body.protocol != VERSION {
         return Err(error(StatusCode::CONFLICT, "unsupported_protocol"));
     }

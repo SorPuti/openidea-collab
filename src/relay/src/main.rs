@@ -26,7 +26,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         std::env::current_dir()?.join(state)
     };
-    let relay = Relay::new(&origin, Some(state))?;
+    let admission = std::env::var("COLLAB_ADMISSION_TOKEN").ok();
+    let relay = Relay::with_admission(&origin, Some(state), admission.as_deref())?;
     let listener = tokio::net::TcpListener::bind(address).await?;
     eprintln!(
         "OpenIDEA relay listening on {address}; content is transient, authorization metadata is persisted"
