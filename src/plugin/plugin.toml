@@ -13,6 +13,10 @@ activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready"
 [capabilities]
 required = ["project.read", "editor.read", "editor.write", "events", "storage", "secrets", "net:collab.synthosia.com"]
 
+[contributes.settings]
+title = "OpenIDEA Collab"
+schema = "settings.schema.json"
+
 [[contributes.secrets]]
 name = "member-credential"
 label = "Collaboration member credential"

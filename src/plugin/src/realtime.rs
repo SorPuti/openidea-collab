@@ -10,7 +10,7 @@ use openidea_collab_core::{
     policy::{project_identity, safe_relative_path},
     transfer::{Reassembly, split},
 };
-use openidea_collab_protocol::{DEFAULT_ORIGIN, Endpoint, Frame, Kind, Role, SUBPROTOCOL};
+use openidea_collab_protocol::{Endpoint, Frame, Kind, Role, SUBPROTOCOL};
 use openidea_plugin::{
     DocumentChanged, Error, Event, Position, Project, Range, TextEdit,
     host::{self, WebSocket, WebSocketRequest},
@@ -37,6 +37,7 @@ struct LiveDocument {
 pub struct Realtime {
     socket: WebSocket,
     root: String,
+    relay: String,
     project: [u8; 32],
     session_id: Uuid,
     member_id: Uuid,
@@ -58,7 +59,7 @@ impl Realtime {
         let socket = WebSocket::connect(
             project,
             &WebSocketRequest {
-                url: Endpoint::parse(DEFAULT_ORIGIN)
+                url: Endpoint::parse(&session.relay)
                     .map_err(|message| Error::Invalid(message.into()))?
                     .websocket(),
                 headers: vec![(
@@ -71,6 +72,7 @@ impl Realtime {
         let mut runtime = Self {
             socket,
             root: root.trim_end_matches('/').to_owned(),
+            relay: session.relay.clone(),
             project: session.project,
             session_id: session.session_id,
             member_id: session.member_id,
@@ -153,7 +155,11 @@ impl Realtime {
         let absolute = absolute_path(&self.root, &shared.path);
         let current = project.document(&absolute)?;
         if self.role == Role::Owner {
-            client::register_document(&self.session_id.to_string(), shared.document_id)?;
+            client::register_document(
+                &self.relay,
+                &self.session_id.to_string(),
+                shared.document_id,
+            )?;
         }
         let restored = restore_checkpoint(self.session_id, shared.document_id, self.project)?;
         let (mut crdt, initialized) = match restored {

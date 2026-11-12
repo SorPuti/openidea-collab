@@ -1,5 +1,5 @@
 use openidea_collab_core::policy::project_identity;
-use openidea_collab_protocol::{DEFAULT_ORIGIN, Role, SessionCredential};
+use openidea_collab_protocol::{Role, SessionCredential};
 use openidea_plugin::{Error, Invocation, host};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -37,7 +37,7 @@ pub fn load() -> Result<Option<Session>, Error> {
     let session: Session = serde_json::from_str(&value)
         .map_err(|_| Error::Invalid("Invalid stored session; leave it before continuing".into()))?;
     if !matches!(session.schema, 1 | 2)
-        || session.relay != DEFAULT_ORIGIN
+        || openidea_collab_protocol::Endpoint::parse(&session.relay).is_err()
         || session.session_id.is_nil()
         || session.member_id.is_nil()
     {
@@ -55,11 +55,11 @@ pub fn for_project(ctx: &Invocation) -> Result<Option<Session>, Error> {
         session => Ok(session),
     }
 }
-pub fn save(ctx: &Invocation, credential: SessionCredential) -> Result<(), Error> {
+pub fn save(ctx: &Invocation, relay: String, credential: SessionCredential) -> Result<(), Error> {
     let session = Session {
         schema: 2,
         project: project_identity(&root(ctx)?),
-        relay: DEFAULT_ORIGIN.into(),
+        relay,
         session_id: credential.session_id,
         member_id: credential.member_id,
         role: credential.role,

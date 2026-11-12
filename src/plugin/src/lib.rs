@@ -51,15 +51,16 @@ impl Plugin for CollabPlugin {
                 )? {
                     return Ok(None);
                 }
+                let relay = client::relay_origin()?;
                 let credential = if id == "create-session" {
-                    client::create()?
+                    client::create(&relay)?
                 } else {
                     let Some(invitation) = host::input("Paste the invitation URL", None)? else {
                         return Ok(None);
                     };
-                    client::join(invitation.trim())?
+                    client::join(&relay, invitation.trim())?
                 };
-                state::save(ctx, credential)?;
+                state::save(ctx, relay, credential)?;
                 self.connect(ctx)?;
             }
             "create-invite" => {
@@ -68,7 +69,8 @@ impl Plugin for CollabPlugin {
                 if session.role != Role::Owner {
                     return Err(Error::Denied("Only the session owner can invite".into()));
                 }
-                self.invitation = Some(client::invite(&session.session_id.to_string())?.url);
+                self.invitation =
+                    Some(client::invite(&session.relay, &session.session_id.to_string())?.url);
             }
             "leave-session" => {
                 if let Some(session) = state::load()? {
@@ -80,6 +82,7 @@ impl Plugin for CollabPlugin {
                     }
                     // If the server cannot revoke, retain the credential and report the error.
                     client::leave(
+                        &session.relay,
                         &session.session_id.to_string(),
                         &session.member_id.to_string(),
                     )?;
@@ -327,7 +330,13 @@ impl Views for CollabPlugin {
             |runtime| runtime.status().to_owned(),
         );
         let mut fields = vec![
-            Field::new("relay", "Relay", FieldValue::label(DEFAULT_ORIGIN)),
+            Field::new(
+                "relay",
+                "Relay",
+                FieldValue::label(
+                    &client::relay_origin().unwrap_or_else(|_| DEFAULT_ORIGIN.into()),
+                ),
+            ),
             Field::new("status", "Status", FieldValue::label(&status)),
         ];
         let session = state::for_project(ctx);

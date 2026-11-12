@@ -1,0 +1,10 @@
+{
+  "properties": {
+    "relayOrigin": {
+      "type": "string",
+      "title": "Relay origin",
+      "description": "HTTPS origin of a compatible self-hosted Collab relay. All session members must use the same origin.",
+      "default": "https://collab.synthosia.com"
+    }
+  }
+}
