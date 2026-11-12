@@ -220,7 +220,7 @@ impl Realtime {
 
     fn send_payload(
         &self,
-        project: &Project,
+        _project: &Project,
         kind: Kind,
         document: Uuid,
         target: Uuid,
