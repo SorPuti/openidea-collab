@@ -13,6 +13,8 @@ fn mock() -> MockHost {
         "secrets",
         "project.read",
         "editor.read",
+        // Used only to model a human's local editor edit; the package itself
+        // does not declare this capability.
         "editor.write",
         "events",
         "net:collab.synthosia.com",
@@ -129,7 +131,7 @@ fn already_revoked_membership_can_be_forgotten_without_retaining_credentials() {
 }
 
 #[test]
-fn document_change_flows_through_crdt_websocket_and_remote_edit_returns_to_editor() {
+fn document_change_flows_to_websocket_and_remote_edit_is_refused_without_ack() {
     let mock = mock();
     mock.open_editor("/project/src/main.rs", "rust", "hello", &[]);
     mock.on_fetch(|request| {
@@ -264,9 +266,14 @@ fn document_change_flows_through_crdt_websocket_and_remote_edit_returns_to_edito
         &mock.invocation(),
     );
 
-    assert_eq!(mock.editor_text(), "hello! remote");
+    assert_eq!(mock.editor_text(), "hello!");
+    assert_eq!(
+        mock.notifications().last().unwrap().title,
+        "Collaboration update refused"
+    );
     assert!(
-        mock.websockets()
+        !mock
+            .websockets()
             .iter()
             .flat_map(|socket| &socket.sent)
             .map(|bytes| Frame::decode(bytes).unwrap())

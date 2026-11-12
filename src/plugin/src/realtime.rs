@@ -12,9 +12,11 @@ use openidea_collab_core::{
 };
 use openidea_collab_protocol::{Endpoint, Frame, Kind, Role, SUBPROTOCOL};
 use openidea_plugin::{
-    DocumentChanged, Error, Event, Position, Project, Range, TextEdit,
+    DocumentChanged, Error, Event, Project,
     host::{self, WebSocket, WebSocketRequest},
 };
+#[cfg(test)]
+use openidea_plugin::{Position, Range};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -433,63 +435,25 @@ impl Realtime {
 
     fn apply_remote(
         &mut self,
-        project: &Project,
+        _project: &Project,
         document_id: Uuid,
-        update: &[u8],
+        _update: &[u8],
     ) -> Result<(), Error> {
-        let mut operation_to_send = None;
         let document = self
             .documents
             .get_mut(&document_id)
             .expect("document checked before apply");
-        let current = project.document(&document.absolute)?;
-        if document.initialized && document.crdt.text() != current.text {
-            if self.role.can_write() {
-                operation_to_send = Some(
-                    replace_crdt_text(&mut document.crdt, &current.text).map_err(collab_error)?,
-                );
-                document.editor_version = current.version;
-            } else {
-                return Err(Error::Stale);
-            }
-        }
-        let before = document.crdt.checkpoint(self.project);
-        document.crdt.receive(update).map_err(collab_error)?;
-        let merged = document.crdt.text();
-        if !document.initialized && current.text != merged {
-            document.crdt = CrdtDocument::restore(&before, self.project).map_err(collab_error)?;
-            self.status = format!(
-                "Conflict in {}: local content was preserved because it differs from the shared base",
-                document.shared.path
-            );
-            return Err(Error::Stale);
-        }
-        document.initialized = true;
-        if current.text != merged {
-            let version = match project.apply_document_edits(
-                &document.absolute,
-                current.version,
-                &[TextEdit {
-                    range: whole_document(&current.text),
-                    text: merged,
-                }],
-            ) {
-                Ok(version) => version,
-                Err(error) => {
-                    document.crdt =
-                        CrdtDocument::restore(&before, self.project).map_err(collab_error)?;
-                    persist_checkpoint(self.session_id, document_id, self.project, &document.crdt)?;
-                    return Err(error);
-                }
-            };
-            document.editor_version = version;
-            document.suppressed_versions.insert(version);
-        }
-        persist_checkpoint(self.session_id, document_id, self.project, &document.crdt)?;
-        if let Some(operation) = operation_to_send {
-            self.send_operation(project, document_id, operation)?;
-        }
-        Ok(())
+        // OpenIDEA 1.6 resolves editor document paths, but it does not yet
+        // expose the no-follow, control-directory resolver required for a
+        // collaboration plugin to safely turn network bytes into a write.
+        // Do not ACK: the sender must not treat this as a delivered edit.
+        self.status = format!(
+            "Remote update for {} was refused until the IDE provides no-follow document writes",
+            document.shared.path
+        );
+        Err(Error::Denied(
+            "Remote document application is disabled pending host no-follow protection".into(),
+        ))
     }
 }
 
@@ -600,6 +564,7 @@ fn single_edit<'a>(current: &str, target: &'a str) -> (u32, u32, &'a str) {
     )
 }
 
+#[cfg(test)]
 fn whole_document(text: &str) -> Range {
     let mut line = 0;
     let mut character = 0;

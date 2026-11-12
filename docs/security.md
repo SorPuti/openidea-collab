@@ -6,12 +6,11 @@ The active server is a bounded authenticated relay, replacing the historical unr
 
 The relay only binds to loopback, expects a TLS reverse proxy at collab.synthosia.com, rejects credentials in socket queries and refuses browser-origin sockets. Metadata stores credential digests rather than bearer values. Content is never written to metadata or logs. End-to-end encryption is not implemented; a TLS-terminating operator can inspect transient traffic.
 
-The plugin asks only for the configured HTTPS origin, project read (root identity), storage and one declared keychain secret. It never uploads a file or writes remote content. Installation/activation and save/scheduled events do not send requests. Legacy global room state is removed on activation and never resumed.
+The plugin asks only for the configured HTTPS origin, project/editor read, storage and declared keychain secrets. It never writes remote content: remote document application is disabled until OpenIDEA ships a no-follow resolver for this API. Installation/activation and save/scheduled events do not send requests. Legacy global room state is removed on activation and never resumed.
 
 ## Remaining release blockers
 
-- Host-owned WSS events, native document transactions/undo and a verified local persistence adapter.
-- Filesystem no-follow protection, including ancestor races and cross-platform links, before any remote file application or project transfer. The standalone lexical policy does not solve this.
+- Host-provided no-follow protection, including ancestor races and cross-platform links, before enabling any remote document application or project transfer. The standalone lexical policy does not solve this; therefore this package refuses inbound document updates without acknowledging them.
 - Explicit file scope preview, ignore handling, secret exclusions, safe bootstrap and conflicts before sending project content.
 - Real IDE installation, project-switch, refusal, revocation, offline/restart, undo and two-client tests.
 - Client core resource/fuzz/performance testing, independent security review and complete third-party notices.

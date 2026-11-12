@@ -12,10 +12,10 @@ Experimental realtime collaboration for **collab.synthosia.com**, operated by Sy
 - Store the member credential in the IDE's declared OS-keychain secret, never project files or plugin key-value storage.
 - Open one project-bound WSS connection through the IDE host.
 - Share only documents selected explicitly by each participant. **Share All Open Documents** batches the currently open eligible editors behind one exact-path confirmation; it never scans or opens the project.
-- Forward committed UTF-16 document changes through a bounded CRDT protocol and apply remote text with version checks.
+- Forward committed UTF-16 document changes through a bounded CRDT protocol. Inbound document application is deliberately disabled until the IDE provides no-follow document access.
 - Persist project-bound checkpoints and pending updates in private plugin storage for recovery.
 
-The plugin does not subscribe to file-save events, scan the project, restore the old global room, launch a helper, or expose arbitrary filesystem writes. A document event subscription is installed once for the exact project-relative paths the user shared, including an explicitly confirmed batch of currently open editors. The host refuses symlinks, VCS/IDE control paths and common secret files on every document read and remote apply.
+The plugin does not subscribe to file-save events, scan the project, restore the old global room, launch a helper, or expose arbitrary filesystem writes. A document event subscription is installed once for the exact project-relative paths the user shared, including an explicitly confirmed batch of currently open editors. The plugin's lexical policy refuses VCS/IDE control paths and common secret names. It does not claim filesystem no-follow protection, and it does not apply inbound changes.
 
 ## Installation
 
@@ -25,13 +25,12 @@ Install a reviewed, signed `.oiplugin` using Settings → Plugins. A collaborato
 
 - `net:collab.synthosia.com`: HTTPS session creation, invitation redemption, invitation generation and revocation. No wildcard host or remote plaintext HTTP.
 - `project.read` and `editor.read`: bind consent to one project and read only explicitly shared open documents, including unsaved editor text.
-- `editor.write`: apply a remote merged result through a versioned editor transaction; stale versions change nothing.
 - `events`: receive changes only for the exact shared path filters and host WebSocket readiness.
 - `storage`: nonsecret session metadata, project identity, shared path list and CRDT recovery checkpoints.
 - `secrets`: a member credential and, when required by the relay operator, a room-creation admission token in the IDE keychain.
 
 The session-control requests contain credentials/invitation secrets where required but no source text or absolute project paths. A relay may require an operator-issued admission token to create a room; it is sent only to `POST /v1/sessions` and does not authorize sockets, documents or invitations. Source text is sent only as bounded binary CRDT updates after **Share Current Document** confirmation. Installation/activation performs no network requests. Invitation links must be treated as secrets, are single-use and expire after five minutes by default. Each room is capped server-side at three members total (owner plus at most two collaborators). The current package supports one prepared project session and at most 32 explicitly shared documents at a time.
 
-The relay operator can inspect transient traffic after TLS termination; no E2EE is claimed. The relay stores authorization/document IDs but does not persist content. A slow client is disconnected rather than allowed to grow an unbounded queue; reconnect performs state-vector synchronization with an online peer.
+The relay operator can inspect transient traffic after TLS termination; no E2EE is claimed. The relay stores authorization/document IDs but does not persist content. A slow client is disconnected rather than allowed to grow an unbounded queue. Inbound updates are refused without an ACK, so senders do not mistake a refused remote edit for delivery.
 
 When leaving, a failed server revocation retains local session information and reports an error. The host removes plugin private storage on uninstall; it is not a backup. MIT license and third-party notices accompany the package.

@@ -1,6 +1,6 @@
 # Implementation status
 
-Target domain: **collab.synthosia.com**. Source version: plugin 0.4.1 (unreleased); signed package version: 0.4.0; relay 0.2.0. On 2026-11-10 the live service returned `/healthz` 200, advertised protocol 1 at `/v1/info`, accepted two independently authenticated WSS clients and forwarded a registered-document binary frame between them. This is a short functional check, not a soak test or security audit.
+Target domain: **collab.synthosia.com**. Source version: plugin 0.4.2 (unreleased); signed package version: 0.4.1; relay 0.2.0. On 2026-11-10 the live service returned `/healthz` 200, advertised protocol 1 at `/v1/info`, accepted two independently authenticated WSS clients and forwarded a registered-document binary frame between them. This is a short functional check, not a soak test or security audit.
 
 | Workstream | Status |
 | --- | --- |
@@ -12,7 +12,7 @@ Target domain: **collab.synthosia.com**. Source version: plugin 0.4.1 (unrelease
 | UTF-16 Yrs core, bounded chunks, project-bound checkpoints/outbox | Implemented and tested |
 | Explicit selected-document collaboration | Implemented in the plugin; exact path filters, no scan/watcher/polling |
 | Local editor change → CRDT → host queue → WSS | Implemented; SDK integration test proves the plugin flow and upstream host tests prove bounded queue delivery |
-| WSS → CRDT → versioned editor transaction → checkpoint/ACK | Implemented and covered by the plugin integration test |
+| WSS → local editor transaction | Intentionally disabled: released host lacks tested no-follow protection for remote document writes; inbound updates are refused without ACK |
 | Initial mismatch/stale write protection | Implemented: local content is preserved, conflict surfaced, refused work retained for recovery |
 | Project/session isolation and keychain credential | Implemented and tested |
 | Host API | API 1.6 is released in [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43), including [#2544](https://github.com/l0ng-ai/openidea/pull/2544) project-bound WSS and [#2610](https://github.com/l0ng-ai/openidea/pull/2610) project-relative document events/versioned editor access. The plugin pins the official tag. |

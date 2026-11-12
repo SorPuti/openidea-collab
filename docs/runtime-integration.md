@@ -12,7 +12,7 @@ The upstream change supplies:
 - coalesced `websocket-ready` events instead of polling;
 - exact project-relative `document-changed` subscriptions;
 - versioned reads and atomic UTF-16 editor edits for explicit open documents;
-- no-follow path checks and exclusions for VCS/IDE control paths and common secrets;
+- project-relative subscriptions and versioned editor APIs; no-follow remote application is not yet supplied by the released host;
 - an SDK mock that records frames, accepts inbound messages, models close/drain and enforces project/network grants.
 
 This layer contains no Synthosia URL, room model, CRDT, member role or OpenIDEA Collab protocol.
@@ -29,15 +29,13 @@ versioned document event
   -> bounded host WebSocket send
   -> authenticated relay forwarding
   -> bounded host receive queue + websocket-ready
-  -> chunk validation/reassembly + Yrs merge
-  -> versioned whole-document editor transaction
-  -> checkpoint
-  -> peer ACK
+  -> chunk validation/reassembly
+  -> explicit refusal (no local editor write and no peer ACK)
 ```
 
 Local events carry sorted non-overlapping offsets in the original document's UTF-16 coordinates. The core applies a batch in descending order as one CRDT transaction. If event versions skip, the runtime reconciles from the current versioned editor snapshot instead of applying offsets to the wrong base.
 
-Incoming initial state is applied only when it matches the selected local base. A differing local document is preserved and reported as a conflict. A stale editor transaction changes nothing; the CRDT is rolled back to its prior checkpoint and retained for retry/recovery. Remote document transactions are background-only: they do not enter the local Undo history and are not re-emitted as local document events, preventing an echo loop.
+Incoming updates are refused before CRDT or editor mutation. This preserves the selected local document and makes the sender retain its pending operation instead of treating a relay receipt as delivery. Remote document application stays disabled until the host has tested no-follow protection for final and ancestor links, including control directories.
 
 The relay stores no replay backlog. On reconnect, persisted pending operations are resent and state vectors request missing state from an online authorized peer. Disconnect clears the event path filter; leaving revokes membership and then removes the local credential/session.
 

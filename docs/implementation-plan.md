@@ -5,7 +5,7 @@
 - Relay control plane: per-member credentials, role/document authorization, single-use invitations, three-member cap, revocation, bounded WSS forwarding and metadata-only persistence.
 - Client core: UTF-16 Yrs updates, bounded transfers/reassembly, project-bound integrity checkpoints and recoverable pending operations.
 - Generic OpenIDEA API 1.6 in [v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43): host-owned project-bound WSS, explicit document subscriptions, versioned editor access, bounded queues and SDK/mock/documentation.
-- Plugin 0.4.0 source: project-bound sessions, keychain credential, automatic connection after prepare/join, explicit per-document confirmation, exact event filters, CRDT propagation, remote versioned apply, conflict preservation, checkpoint-before-ACK and reconnect state exchange.
+- Plugin 0.4.2 source: project-bound sessions, keychain credential, automatic connection after prepare/join, explicit per-document confirmation, exact event filters and CRDT propagation. Inbound remote application is deliberately refused without ACK until the host supplies tested no-follow resolution.
 - Evidence: workspace/unit/integration suites, SDK suite, live HTTPS info and authenticated two-client WSS forwarding at `collab.synthosia.com`.
 
 ## Plugin acceptance after upstream release

@@ -2,11 +2,11 @@
 
 Open-source collaboration for [OpenIDEA](https://github.com/l0ng-ai/openidea), using a small authenticated relay at **collab.synthosia.com**. MIT licensed.
 
-**Status:** the relay, authenticated WSS forwarding and an experimental native realtime plugin are implemented. The plugin uses OpenIDEA's released API 1.6 from [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43): generic project-bound WebSockets plus versioned document events and edits. The signed 0.4.0 package is under marketplace review; install it only from the marketplace entry once that review is complete.
+**Status:** the relay, authenticated WSS forwarding and an experimental native realtime plugin are implemented. The plugin uses OpenIDEA's released API 1.6 from [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43). Remote document application is disabled until OpenIDEA releases tested no-follow protection for this API; inbound updates are refused rather than written. The signed 0.4.1 package is under marketplace review; install it only from the marketplace entry once that review is complete.
 
 ## Install as a collaborator
 
-The intended distribution is one signed `.oiplugin` installed through **Settings → Plugins**. No Rust, server, tunnel, VPN or native helper is required on the collaborator's machine. In OpenIDEA v0.1.43 or newer, install the package, prepare or join a session, connect realtime, focus a document and choose **Share Current Document**. Every participant explicitly selects the same project-relative document; no project scan or automatic whole-project sharing occurs.
+The intended distribution is one signed `.oiplugin` installed through **Settings → Plugins**. No Rust, server, tunnel, VPN or native helper is required on the collaborator's machine. In OpenIDEA v0.1.43 or newer, install the package, prepare or join a session, connect realtime, focus a document and choose **Share Current Document**. Every participant explicitly selects the same project-relative document; no project scan or automatic whole-project sharing occurs. The current experimental package transmits confirmed local updates but deliberately refuses inbound updates without an ACK; it must not be represented as a safe remote-editing tool until the host boundary is released.
 
 The default plugin connects to `https://collab.synthosia.com`, operated by Synthosia. If that relay is unavailable, collaboration stops until it is reachable again; it is not a backup or offline sync service. Invitations contain a temporary, single-use secret in the URL fragment. Realtime transport is **WSS**, terminated by the operator's TLS reverse proxy; the Rust relay binds to loopback. HTTPS and WSS serve different parts of the same protocol.
 
