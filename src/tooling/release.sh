@@ -37,7 +37,7 @@ import subprocess
 import sys
 root, tag = sys.argv[1:]
 commit = subprocess.check_output(["git", "-C", root, "rev-parse", f"refs/tags/{tag}^{{commit}}"], text=True).strip()
-Path("source.json").write_text(json.dumps({"tag": tag, "commit": commit, "sdk_tag": "v0.1.40", "rust": "1.96.0"}, indent=2) + "\n")
+Path("source.json").write_text(json.dumps({"tag": tag, "commit": commit, "sdk_tag": "v0.1.43", "rust": "1.96.0"}, indent=2) + "\n")
 files = sorted(p for p in Path('.').iterdir() if p.is_file())
 Path("SHA256SUMS").write_text(''.join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n" for p in files))
 PY

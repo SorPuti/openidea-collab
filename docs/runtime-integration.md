@@ -1,6 +1,6 @@
 # Native runtime integration
 
-The native design is implemented across two repositories. [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) provides the merged generic API 1.6 WSS transport; [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610) adds project-relative document events and versioned editor access. This repository consumes both for collaboration. The API remains unreleased, so the plugin pins a stacked fork commit and is a development build until maintainers merge and release the host changes.
+The native design is implemented across two repositories. [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43) releases API 1.6: [#2544](https://github.com/l0ng-ai/openidea/pull/2544) provides generic WSS transport and [#2610](https://github.com/l0ng-ai/openidea/pull/2610) adds project-relative document events and versioned editor access. This repository consumes that official release for collaboration.
 
 ## Generic OpenIDEA layer
 
@@ -43,6 +43,6 @@ The relay stores no replay backlog. On reconnect, persisted pending operations a
 
 ## Validation boundary
 
-Unit and integration tests cover the queue, SDK mock transport, project binding, subscriptions, CRDT convergence/checkpoints, relay authorization/backpressure, and the plugin's document-to-WSS-to-document path. A real marketplace installation on an official OpenIDEA release cannot be demonstrated until PR #2544 is merged and released. Remaining release evidence is a real two/three-IDE session, long-running reconnect/conflict testing, official CLI packaging/signature/checksum, and marketplace re-review.
+Unit and integration tests cover the queue, SDK mock transport, project binding, subscriptions, CRDT convergence/checkpoints, relay authorization/backpressure, and the plugin's document-to-WSS-to-document path. Remaining release evidence is a real two/three-IDE session, long-running reconnect/conflict testing, official CLI packaging/signature/checksum, and marketplace re-review.
 
 `src/companion` and `src/host-api/prototype` are retained as historical experiments. The plugin does not launch the companion and requests no process capability.

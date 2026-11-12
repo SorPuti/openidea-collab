@@ -4,7 +4,7 @@
 
 The goal is one reviewed, signed package in OpenIDEA Settings → Plugins, followed by Prepare/Create Session or Accept Invitation. No external installer, Rust, CLI, native helper, server, VPN or tunnel is needed on a collaborator's computer. Installing the plugin does not transmit files.
 
-The 0.4.0 development package provides realtime only in an OpenIDEA build containing PR #2544. Marketplace installation must wait for that API's official release and the multi-IDE acceptance tests. The hosted relay is active, but service availability does not imply marketplace approval.
+The 0.4.0 release candidate provides realtime in OpenIDEA v0.1.43 or newer. Marketplace installation must still wait for multi-IDE acceptance tests, a signed package and registry review. The hosted relay is active, but service availability does not imply marketplace approval.
 
 The owner prepares a session, generates an invitation, and sends the link. The recipient pastes it into the native plugin dialog and confirms the relay. The link is exact-origin validated and redeemed once. Each participant then focuses the same project-relative document and confirms **Share Current Document**; unsaved text is included. Nothing else in the project is scanned or uploaded.
 
@@ -12,7 +12,7 @@ A production package is installed by the IDE using the registered publisher key.
 
 ## Developers
 
-Use the repository Rust toolchain and an OpenIDEA CLI built from PR #2544:
+Use the repository Rust toolchain and the official OpenIDEA v0.1.43 CLI:
 
 ```sh
 ./src/tooling/package-dev.sh

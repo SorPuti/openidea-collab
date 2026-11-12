@@ -2,13 +2,13 @@
 
 Run `./src/tooling/check.sh`. It validates metadata/provenance tests, formatting, Clippy with warnings denied, workspace tests and the WASM build. The relay integration suite starts its own loopback listener on an OS-selected port and tests HTTP/WebSocket access without a running external service.
 
-Package check: with an `openidea-plugin` CLI built from PR #2544 available, run `./src/tooling/package-dev.sh`. This verifies the staged development package, not a publisher signature or marketplace installation.
+Package check: with the official OpenIDEA v0.1.43 `openidea-plugin` CLI available, run `./src/tooling/package-dev.sh`. This verifies the staged development package, not a publisher signature or marketplace installation.
 
 The suites cover single-use invitations under concurrent redemption, viewer/owner roles, authenticated sender stamping, registered-document/room boundaries, revoked open sockets, oversized frames, metadata restart without credentials/content, failed metadata commits, queue overflow, malformed protocol, exact-origin invites, UTF-16/convergence, checkpoint corruption/project mismatch, chunk reordering and unsafe path policy. Plugin/SDK tests also prove activation sends no files, project changes cannot reuse a session, exact document filters are installed, local committed text reaches an outbound CRDT frame, and an inbound peer update reaches the versioned editor and produces an ACK.
 
 ## Required actual IDE acceptance
 
-After PR #2544 is released, install the candidate in three isolated IDE profiles without Rust/CLI/helper. Confirm native UI, owner/editor/viewer grants, exact path isolation, project switching, safe credential lifecycle, concurrent native edits, nonfocused documents, Undo/Redo, Unicode/IME, reconnect/reclamation, checkpoint failure handling, revocation and bounded queues. Use disposable synthetic content only.
+Install the candidate in three isolated OpenIDEA v0.1.43-or-newer profiles without Rust/CLI/helper. Confirm native UI, owner/editor/viewer grants, exact path isolation, project switching, safe credential lifecycle, concurrent native edits, nonfocused documents, Undo/Redo, Unicode/IME, reconnect/reclamation, checkpoint failure handling, revocation and bounded queues. Use disposable synthetic content only.
 
 Public deployment also requires actual HTTPS/WSS certificate/proxy tests, operator admission controls, resource measurements, restart and slow-peer behavior. A localhost forwarding measurement is not a measure of internet or IDE editing latency. Platform and full-IDE tests not executed must remain marked pending.
 

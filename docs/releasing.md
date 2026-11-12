@@ -1,8 +1,8 @@
 # Release process
 
-Keep marketplace publication gated while the upstream host release, real IDE tests, security review and operator requirements in [implementation-status.md](implementation-status.md) remain unresolved. Version 0.4.0 is a development realtime build, not an approved marketplace release.
+Keep marketplace publication gated while real IDE tests, security review and operator requirements in [implementation-status.md](implementation-status.md) remain unresolved. Version 0.4.0 is a release candidate, not an approved marketplace release.
 
-Rust 1.96.0 and the workspace Cargo.lock are pinned. The component currently pins fork commit `5af2168`, which stacks document events and editor access in PR #2610 on the merged WSS transport in PR #2544. Replace it with an exact official SDK/CLI release before tagging; a fork revision must not be presented as an upstream release.
+Rust 1.96.0 and the workspace Cargo.lock are pinned. The component uses the official OpenIDEA `v0.1.43` SDK/CLI, which releases API 1.6 (project-bound WebSockets, project-relative document events and versioned editor access). Do not replace this exact release with an unreviewed fork revision for a marketplace build.
 
 ```sh
 ./src/tooling/check.sh

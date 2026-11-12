@@ -71,7 +71,7 @@ jobs:
       - name: Install CLI matching the SDK
         run: |
           rustup toolchain install 1.96.0 --profile minimal
-          cargo +1.96.0 install --locked --git https://github.com/l0ng-ai/openidea --tag v0.1.40 ide-host --bin openidea-plugin
+          cargo +1.96.0 install --locked --git https://github.com/l0ng-ai/openidea --tag v0.1.43 ide-host --bin openidea-plugin
       - name: Build and sign exact tag
         env:
           OPENIDEA_KEY: ${{ secrets.OPENIDEA_KEY }}

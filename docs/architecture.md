@@ -20,7 +20,7 @@ The core stages a CRDT document before accepting remote changes so a malformed o
 
 ## Safety and lifecycle
 
-The plugin consumes the generic host implementation in OpenIDEA PR #2544. It has no file-save subscription or arbitrary project-write capability. It subscribes only to exact explicitly shared document paths and applies remote text through expected-version editor transactions. The host repeats no-follow and control/secret path checks on access and apply. The unsafe legacy REST file store and automatic global-room restoration remain removed.
+The plugin consumes the generic host implementation released in OpenIDEA v0.1.43. It has no file-save subscription or arbitrary project-write capability. It subscribes only to exact explicitly shared document paths and applies remote text through expected-version editor transactions. The host repeats no-follow and control/secret path checks on access and apply. The unsafe legacy REST file store and automatic global-room restoration remain removed.
 
 The local project identity is hashed for storage and never sent to the relay. All session and connection operations require that project; a project switch requires leaving explicitly. The plugin's lexical policy limits what can be proposed, while the host's repeated shared-document resolver enforces the filesystem boundary.
 

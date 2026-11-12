@@ -1,6 +1,6 @@
 # OpenIDEA host integration
 
-The generic WSS transport is merged in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544), while document events and versioned editor access are separated into [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610); both follow [issue #2532](https://github.com/l0ng-ai/openidea/issues/2532). This plugin therefore pins the contributor fork commit `5af2168`; that pin is suitable for development validation, not a marketplace release.
+[OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43) releases the generic WSS transport from [#2544](https://github.com/l0ng-ai/openidea/pull/2544) and the document events/versioned editor access from [#2610](https://github.com/l0ng-ai/openidea/pull/2610); both follow [issue #2532](https://github.com/l0ng-ai/openidea/issues/2532). This plugin pins that official SDK release.
 
 ## Public surface
 
@@ -18,6 +18,6 @@ The upstream implementation is not tailored to this repository. It contains no r
 
 The upstream branch includes queue race/overflow tests, real loopback WebSocket transport tests, subscription isolation/cleanup, versioned editor tests, project-crossing refusals, SDK WIT coverage and a functional WebSocket mock. The plugin test uses those public wrappers to prove local document event → CRDT → WebSocket and inbound frame → versioned editor → ACK.
 
-Before an official plugin release, maintainers must merge the PR, publish an OpenIDEA version containing API 1.6, and preserve the accepted surface or document any required migration. A real IDE acceptance pass must then cover two/three profiles, idle runtime reclamation, Unicode/IME, Undo/Redo, project close, grant revocation, reconnect, conflicts and bounded slow-client behavior.
+Before an official plugin release, perform a real IDE acceptance pass with two/three profiles covering idle runtime reclamation, Unicode/IME, Undo/Redo, project close, grant revocation, reconnect, conflicts and bounded slow-client behavior.
 
 The independent proposal file under `src/host-api/` and the companion are retained as historical design artifacts. They are not used by the active plugin.

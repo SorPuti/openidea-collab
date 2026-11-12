@@ -2,10 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 cargo build --locked --release -p openidea-plugin-openidea-collab --target wasm32-wasip2
+target_dir="${CARGO_TARGET_DIR:-target}"
 package_dir="target/plugin-package"
 mkdir -p "$package_dir/dist"
 cp src/plugin/plugin.toml "$package_dir/plugin.toml"
-cp target/wasm32-wasip2/release/openidea_collab.wasm "$package_dir/dist/plugin.wasm"
+cp "$target_dir/wasm32-wasip2/release/openidea_collab.wasm" "$package_dir/dist/plugin.wasm"
 cp LICENSE NOTICE "$package_dir/"
 cp docs/plugin.md "$package_dir/README.md"
 if [[ -d src/plugin/locales ]]; then

@@ -2,11 +2,11 @@
 
 Open-source collaboration for [OpenIDEA](https://github.com/l0ng-ai/openidea), using a small authenticated relay at **collab.synthosia.com**. MIT licensed.
 
-**Status:** the relay, authenticated WSS forwarding and an experimental native realtime plugin are implemented. The plugin uses the generic project-bound WebSocket and versioned document APIs proposed in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544), so development builds currently pin that reviewed fork commit. It cannot be published as a normal marketplace package until the API is merged and released by OpenIDEA. The source is not an approved marketplace release.
+**Status:** the relay, authenticated WSS forwarding and an experimental native realtime plugin are implemented. The plugin uses OpenIDEA's released API 1.6 from [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43): generic project-bound WebSockets plus versioned document events and edits. The source is not yet an approved marketplace release; it still needs the signed 0.4.0 artifact and marketplace re-review.
 
 ## Install as a collaborator
 
-The intended distribution is one signed `.oiplugin` installed through **Settings → Plugins**. No Rust, server, tunnel, VPN or native helper is required on the collaborator's machine. In a development build of OpenIDEA containing PR #2544, install the package, prepare or join a session, connect realtime, focus a document and choose **Share Current Document**. Every participant explicitly selects the same project-relative document; no project scan or automatic whole-project sharing occurs.
+The intended distribution is one signed `.oiplugin` installed through **Settings → Plugins**. No Rust, server, tunnel, VPN or native helper is required on the collaborator's machine. In OpenIDEA v0.1.43 or newer, install the package, prepare or join a session, connect realtime, focus a document and choose **Share Current Document**. Every participant explicitly selects the same project-relative document; no project scan or automatic whole-project sharing occurs.
 
 The plugin uses `https://collab.synthosia.com` for session control. Invitations contain a temporary, single-use secret in the URL fragment. Realtime transport is **WSS**, terminated by the operator's TLS reverse proxy; the Rust relay binds to loopback. HTTPS and WSS serve different parts of the same protocol.
 
@@ -42,7 +42,7 @@ cargo run --locked -p collab-server
 
 Defaults: `127.0.0.1:4444`, public origin `https://collab.synthosia.com`, private authorization metadata in `./collab-state/metadata.json`. Documents, updates and credentials in plaintext are not written to that file. Use a dedicated state directory. The public domain serves HTTPS/WSS; production monitoring, admission policy and an independent security review remain operator work. See [operations](docs/operations.md).
 
-To build a development plugin package with a CLI built from the PR #2544 branch:
+To build a development plugin package with the official v0.1.43 CLI:
 
 ```sh
 ./src/tooling/package-dev.sh

@@ -4,21 +4,16 @@
 
 - Relay control plane: per-member credentials, role/document authorization, single-use invitations, three-member cap, revocation, bounded WSS forwarding and metadata-only persistence.
 - Client core: UTF-16 Yrs updates, bounded transfers/reassembly, project-bound integrity checkpoints and recoverable pending operations.
-- Generic OpenIDEA API in PR #2544: host-owned project-bound WSS, explicit document subscriptions, versioned editor access, bounded queues and SDK/mock/documentation.
+- Generic OpenIDEA API 1.6 in [v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43): host-owned project-bound WSS, explicit document subscriptions, versioned editor access, bounded queues and SDK/mock/documentation.
 - Plugin 0.4.0 source: project-bound sessions, keychain credential, automatic connection after prepare/join, explicit per-document confirmation, exact event filters, CRDT propagation, remote versioned apply, conflict preservation, checkpoint-before-ACK and reconnect state exchange.
 - Evidence: workspace/unit/integration suites, SDK suite, live HTTPS info and authenticated two-client WSS forwarding at `collab.synthosia.com`.
 
-## Upstream review
-
-Keep PR #2544 generic and focused on issue #2532. Respond to maintainer review with tests and small corrections; do not add Collab protocol concepts to OpenIDEA. Rebase when upstream changes require it and rerun the SDK, host plugin tests, formatting and Clippy. The Collab dependency remains pinned to an immutable fork commit until the API has an official released tag.
-
 ## Plugin acceptance after upstream release
 
-1. Replace the fork revision with the official OpenIDEA SDK tag and update the lockfile.
-2. Build an actual OpenIDEA development/release app containing the merged API.
-3. Install the staged plugin into three isolated profiles and exercise owner/editor/viewer on disposable matching projects.
-4. Validate simultaneous Unicode/IME edits, exact-path isolation, unshared secrets/control paths, stale conflicts, disconnect/reconnect, revocation, project switch/close, idle reclaim, restart and slow-client overflow.
-5. Record CPU/RSS/latency and run a longer TLS/proxy soak. Preserve refused/pending updates and verify no silent overwrite or false delivery status.
+1. Build against the official OpenIDEA v0.1.43 SDK/CLI and preserve the lockfile provenance.
+2. Install the staged plugin into three isolated profiles and exercise owner/editor/viewer on disposable matching projects.
+3. Validate simultaneous Unicode/IME edits, exact-path isolation, unshared secrets/control paths, stale conflicts, disconnect/reconnect, revocation, project switch/close, idle reclaim, restart and slow-client overflow.
+4. Record CPU/RSS/latency and run a longer TLS/proxy soak. Preserve refused/pending updates and verify no silent overwrite or false delivery status.
 
 ## Security and operations before marketplace
 

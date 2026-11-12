@@ -1,6 +1,6 @@
 # OpenIDEA Collab
 
-Experimental realtime collaboration for the authenticated relay at **collab.synthosia.com**. This package is not approved for marketplace listing and currently requires the OpenIDEA API implemented by upstream PR #2544.
+Experimental realtime collaboration for the authenticated relay at **collab.synthosia.com**. This package is not approved for marketplace listing and requires OpenIDEA v0.1.43 or newer (API 1.6).
 
 ## What this package does
 
@@ -19,7 +19,7 @@ The plugin does not subscribe to file-save events, scan the project, restore the
 
 ## Installation
 
-Install a reviewed, signed `.oiplugin` using Settings → Plugins. A collaborator needs no compiler or extra executable. Until PR #2544 is merged and released, use a development OpenIDEA build containing that API and link the staged package explicitly. Marketplace distribution still requires a released host API, a clean tag, a signed package and maintainer re-review.
+Install a reviewed, signed `.oiplugin` using Settings → Plugins. A collaborator needs no compiler or extra executable. For development, link the staged package explicitly in OpenIDEA v0.1.43 or newer. Marketplace distribution still requires a clean tag, a signed package and maintainer re-review.
 
 ## Permissions
 
