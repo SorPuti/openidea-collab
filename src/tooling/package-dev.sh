@@ -7,6 +7,10 @@ package_dir="target/plugin-package"
 mkdir -p "$package_dir/dist"
 cp src/plugin/plugin.toml "$package_dir/plugin.toml"
 cp src/plugin/settings.schema.json "$package_dir/settings.schema.json"
+if [[ -d src/plugin/icons ]]; then
+  mkdir -p "$package_dir/icons"
+  cp src/plugin/icons/*.svg "$package_dir/icons/"
+fi
 cp "$target_dir/wasm32-wasip2/release/openidea_collab.wasm" "$package_dir/dist/plugin.wasm"
 cp LICENSE NOTICE "$package_dir/"
 cp docs/plugin.md "$package_dir/README.md"

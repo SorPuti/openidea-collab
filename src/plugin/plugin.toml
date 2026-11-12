@@ -1,11 +1,12 @@
 id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
-version = "0.4.2"
+version = "0.4.3"
 description = "Realtime collaboration for explicitly shared OpenIDEA documents through collab.synthosia.com."
 authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
-change-notes = "Experimental project-bound WSS collaboration with explicit document sharing. Remote document application is disabled pending host no-follow guarantees."
+change-notes = "Adds the OpenIDEA Collab marketplace and panel icon. Remote document application remains disabled pending host no-follow guarantees."
 categories = ["tools"]
+icon = "icons/collab.svg"
 engines.openidea = "^1.6"
 wasm = "dist/plugin.wasm"
 activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready", "on-event:document-changed"]
@@ -75,5 +76,5 @@ category = "Collab"
 [[contributes.views]]
 id = "collab-panel"
 title = "Collaboration"
-icon = "users"
+icon = "icons/collab.svg"
 location = "right"

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="12" y1="8" x2="116" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#101B4D"/>
+      <stop offset="1" stop-color="#07102F"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="27" y1="39" x2="93" y2="99" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38C8FF"/>
+      <stop offset="1" stop-color="#2857FF"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="56" y1="103" x2="108" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#16DDB4"/>
+      <stop offset="1" stop-color="#54F3C7"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="29" fill="url(#bg)"/>
+  <path d="M27 79c0-15 7-29 19-38 10-8 23-10 35-6l14 5-11 18-12-4c-7-2-14-1-20 4-6 4-10 12-10 20 0 12 9 22 21 22h13v19H62c-19 0-35-16-35-40Z" fill="url(#blue)"/>
+  <path d="M95 40c10 8 16 21 16 34 0 19-16 35-36 35H58l17-20h2c11 0 20-9 20-20 0-6-3-12-8-16l-9-6 15-7Z" fill="url(#mint)"/>
+  <path d="M45 58c0-7 6-13 13-13h13c7 0 13 6 13 13v18c0 7-6 13-13 13H58c-7 0-13-6-13-13V58Z" fill="#0A143B"/>
+  <path d="M57 60h17M57 68h13M57 76h9" stroke="#EAF5FF" stroke-width="5" stroke-linecap="round"/>
+</svg>

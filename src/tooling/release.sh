@@ -32,7 +32,7 @@ mkdir -p "$DIST_DIR"
 "$CLI" index "$DIST_DIR" --publisher "$OPENIDEA_PUBLISHER" --key "$KEY_FILE" \
   --download-base "$OPENIDEA_DOWNLOAD_BASE" --out "$DIST_DIR/index.json"
 # Preserve the development installer bundle format, with license and README.
-tar -czf "$DIST_DIR/plugin.tar.gz" -C target/plugin-package plugin.toml README.md LICENSE NOTICE dist locales
+tar -czf "$DIST_DIR/plugin.tar.gz" -C target/plugin-package plugin.toml README.md LICENSE NOTICE dist locales icons
 cd "$DIST_DIR"
 python3 - "$ROOT" "$RELEASE_TAG" <<'PY'
 import hashlib
