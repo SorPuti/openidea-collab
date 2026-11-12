@@ -15,7 +15,7 @@ Target domain: **collab.synthosia.com**. Source version: plugin 0.4.0 (unrelease
 | WSS → CRDT → versioned editor transaction → checkpoint/ACK | Implemented and covered by the plugin integration test |
 | Initial mismatch/stale write protection | Implemented: local content is preserved, conflict surfaced, refused work retained for recovery |
 | Project/session isolation and keychain credential | Implemented and tested |
-| Host API | WSS transport merged in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544); document subscriptions remain in draft [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610). The plugin pins rebased stacked commit `8dcfdf6`. |
+| Host API | WSS transport merged in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544); document subscriptions await review in [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610). The plugin pins stacked commit `180fed4`. |
 | Native helper/companion | No longer required by the selected architecture; prototype remains for research only |
 | Marketplace package | Blocked on upstream merge/release, then clean tag, official build/check/signing and re-review |
 | Public admission/antiabuse and independent security audit | Operator/review work remains |

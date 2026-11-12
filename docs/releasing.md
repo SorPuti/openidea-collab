@@ -2,7 +2,7 @@
 
 Keep marketplace publication gated while the upstream host release, real IDE tests, security review and operator requirements in [implementation-status.md](implementation-status.md) remain unresolved. Version 0.4.0 is a development realtime build, not an approved marketplace release.
 
-Rust 1.96.0 and the workspace Cargo.lock are pinned. The component currently pins fork commit `8dcfdf6`, which stacks document subscriptions in PR #2610 on the merged WSS transport in PR #2544. Replace it with an exact official SDK/CLI release before tagging; a fork revision must not be presented as an upstream release.
+Rust 1.96.0 and the workspace Cargo.lock are pinned. The component currently pins fork commit `180fed4`, which stacks document subscriptions in PR #2610 on the merged WSS transport in PR #2544. Replace it with an exact official SDK/CLI release before tagging; a fork revision must not be presented as an upstream release.
 
 ```sh
 ./src/tooling/check.sh
