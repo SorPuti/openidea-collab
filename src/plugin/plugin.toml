@@ -8,7 +8,7 @@ change-notes = "Experimental project-bound WSS collaboration with explicit docum
 categories = ["tools"]
 engines.openidea = "^1.6"
 wasm = "dist/plugin.wasm"
-activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready"]
+activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready", "on-event:document-changed"]
 
 [capabilities]
 required = ["project.read", "editor.read", "editor.write", "events", "storage", "secrets", "net:collab.synthosia.com"]

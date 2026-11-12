@@ -1,14 +1,14 @@
 # OpenIDEA host integration
 
-The generic WSS transport is merged in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544), while document subscriptions are separated into [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610); both follow [issue #2532](https://github.com/l0ng-ai/openidea/issues/2532). This plugin therefore pins the contributor fork commit `180fed4`; that pin is suitable for development validation, not a marketplace release.
+The generic WSS transport is merged in [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544), while document events and versioned editor access are separated into [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610); both follow [issue #2532](https://github.com/l0ng-ai/openidea/issues/2532). This plugin therefore pins the contributor fork commit `5af2168`; that pin is suitable for development validation, not a marketplace release.
 
 ## Public surface
 
-API 1.6 adds project-bound `WebSocket::{connect, send, drain, subscribe_document, unsubscribe_document}`, `Project::document`, versioned document edit methods, exact path event subscriptions, and typed `document-changed`/`websocket-ready` events. The WIT, runtime adapters, Rust SDK, SDK mock, host implementation and authoring documentation are changed together.
+API 1.6 adds project-bound `WebSocket::{connect, send, drain, close}`, `Project::document`, versioned document edit methods, exact path event subscriptions, and typed `document-changed`/`websocket-ready` events. The plugin owns the collaboration wire protocol: it receives project-relative editor changes, encodes its own frames and sends them through the generic socket.
 
 The host owns transport tasks and queues. It requires WSS outside loopback, one declared secret-backed Authorization header, a granted exact network host and a negotiated subprotocol. Handles cannot be used from another project. Incoming and outgoing queues are bounded by frame count and bytes; overflow rejects the new frame, reports it as refused and closes the connection for resynchronization. Readiness notifications are coalesced, so no scheduled polling is required.
 
-Document access is limited to explicitly named open regular files. Reads and remote applications repeat the shared-document resolver checks, reject symlinks, VCS/IDE control directories, hooks and common secret files, and require project/editor/event grants. Edits use expected versions and UTF-16 ranges; stale writes are atomic refusals.
+Document access is limited to explicitly named open regular files. Reads and remote applications repeat the shared-document resolver checks, reject symlinks, VCS/IDE control directories, hooks and common secret files, and require project/editor/event grants. Edits use expected versions and UTF-16 ranges; stale writes are atomic refusals, do not enter Undo history and are not re-emitted as local changes.
 
 ## Open-source boundary
 

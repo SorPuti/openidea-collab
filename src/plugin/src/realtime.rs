@@ -122,8 +122,7 @@ impl Realtime {
 
     pub fn remove_document(&mut self, shared: &SharedDocument) -> Result<(), Error> {
         if let Some(document) = self.documents.remove(&shared.document_id) {
-            self.by_path.remove(&document.absolute);
-            self.socket.unsubscribe_document(&document.shared.path)?;
+            self.by_path.remove(&document.shared.path);
         }
         host::storage::delete(&checkpoint_key(self.session_id, shared.document_id))?;
         self.refresh_event_filter()
@@ -147,7 +146,6 @@ impl Realtime {
 
     fn load_document(&mut self, project: &Project, shared: SharedDocument) -> Result<(), Error> {
         validate_relative(&shared.path)?;
-        let subscription_path = shared.path.clone();
         let absolute = absolute_path(&self.root, &shared.path);
         let current = project.document(&absolute)?;
         if self.role == Role::Owner {
@@ -169,7 +167,7 @@ impl Realtime {
         if initialized {
             persist_checkpoint(self.session_id, shared.document_id, self.project, &crdt)?;
         }
-        self.by_path.insert(absolute.clone(), shared.document_id);
+        self.by_path.insert(shared.path.clone(), shared.document_id);
         self.documents.insert(
             shared.document_id,
             LiveDocument {
@@ -181,14 +179,16 @@ impl Realtime {
                 editor_version,
             },
         );
-        self.socket.subscribe_document(&subscription_path)?;
         Ok(())
     }
 
     fn refresh_event_filter(&self) -> Result<(), Error> {
-        // The host derives the editor event bridge from WebSocket document
-        // resources, avoiding a second independently scoped path filter.
-        Ok(())
+        let paths: Vec<_> = self
+            .documents
+            .values()
+            .map(|document| document.shared.path.as_str())
+            .collect();
+        host::subscribe_paths("document-changed", &paths)
     }
 
     fn announce(&self, project: &Project, document_id: Uuid) -> Result<(), Error> {

@@ -169,7 +169,7 @@ fn document_change_flows_through_crdt_websocket_and_remote_edit_returns_to_edito
         socket.request.headers[0].1,
         format!("Bearer {}", "A".repeat(43))
     );
-    assert_eq!(socket.subscriptions, ["src/main.rs"]);
+    assert_eq!(mock.path_subscriptions()["document-changed"], ["src/main.rs"]);
     let session = state::load().unwrap().unwrap();
     let document_id = session.documents[0].document_id;
     let snapshot = socket
@@ -194,7 +194,7 @@ fn document_change_flows_through_crdt_websocket_and_remote_edit_returns_to_edito
         .unwrap();
     plugin.handle_events(
         &[Event::DocumentChanged(DocumentChanged {
-            path: "/project/src/main.rs".into(),
+            path: "src/main.rs".into(),
             base_version: local.version,
             version,
             changes: vec![DocumentTextChange {

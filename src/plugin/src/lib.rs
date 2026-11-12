@@ -30,6 +30,7 @@ impl Plugin for CollabPlugin {
     }
     fn deactivate(&mut self) {
         self.realtime = None;
+        host::unsubscribe(EventKind::DocumentChanged);
     }
     fn run_command(
         &mut self,
@@ -161,6 +162,7 @@ impl CollabPlugin {
 
     fn disconnect(&mut self) -> Result<(), Error> {
         self.realtime = None;
+        host::unsubscribe(EventKind::DocumentChanged);
         Ok(())
     }
 

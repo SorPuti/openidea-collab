@@ -1,6 +1,6 @@
 # Native runtime integration
 
-The native design is implemented across two repositories. [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) provides the merged generic API 1.6 WSS transport; [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610) adds explicit document subscriptions. This repository consumes both for collaboration. The subscription API remains unreleased, so the plugin pins stacked fork commit `180fed4` and is a development build until maintainers merge and release the host changes.
+The native design is implemented across two repositories. [OpenIDEA PR #2544](https://github.com/l0ng-ai/openidea/pull/2544) provides the merged generic API 1.6 WSS transport; [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610) adds project-relative document events and versioned editor access. This repository consumes both for collaboration. The API remains unreleased, so the plugin pins a stacked fork commit and is a development build until maintainers merge and release the host changes.
 
 ## Generic OpenIDEA layer
 
@@ -37,9 +37,9 @@ versioned document event
 
 Local events carry sorted non-overlapping offsets in the original document's UTF-16 coordinates. The core applies a batch in descending order as one CRDT transaction. If event versions skip, the runtime reconciles from the current versioned editor snapshot instead of applying offsets to the wrong base.
 
-Incoming initial state is applied only when it matches the selected local base. A differing local document is preserved and reported as a conflict. A stale editor transaction changes nothing; the CRDT is rolled back to its prior checkpoint and retained for retry/recovery. Remote-applied versions are suppressed when their corresponding editor event returns, preventing an echo loop.
+Incoming initial state is applied only when it matches the selected local base. A differing local document is preserved and reported as a conflict. A stale editor transaction changes nothing; the CRDT is rolled back to its prior checkpoint and retained for retry/recovery. Remote document transactions are background-only: they do not enter the local Undo history and are not re-emitted as local document events, preventing an echo loop.
 
-The relay stores no replay backlog. On reconnect, persisted pending operations are resent and state vectors request missing state from an online authorized peer. Disconnect clears live path subscriptions; leaving revokes membership and then removes the local credential/session.
+The relay stores no replay backlog. On reconnect, persisted pending operations are resent and state vectors request missing state from an online authorized peer. Disconnect clears the event path filter; leaving revokes membership and then removes the local credential/session.
 
 ## Validation boundary
 
