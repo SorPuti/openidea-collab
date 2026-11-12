@@ -798,7 +798,7 @@ dependencies = [
 [[package]]
 name = "openidea-plugin"
 version = "0.1.0"
-source = "git+https://github.com/SorPuti/openidea?rev=e48d0b1fc31f0c7d1f214fb6f1e04e8197ba6f48#e48d0b1fc31f0c7d1f214fb6f1e04e8197ba6f48"
+source = "git+https://github.com/SorPuti/openidea?rev=61fe46607243b2e8d75da4136368deac8b2f033a#61fe46607243b2e8d75da4136368deac8b2f033a"
 dependencies = [
  "serde",
  "serde_json",

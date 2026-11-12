@@ -12,7 +12,7 @@ name = "openidea_collab"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-openidea-plugin = { git = "https://github.com/SorPuti/openidea", rev = "e48d0b1fc31f0c7d1f214fb6f1e04e8197ba6f48" }
+openidea-plugin = { git = "https://github.com/SorPuti/openidea", rev = "61fe46607243b2e8d75da4136368deac8b2f033a" }
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
