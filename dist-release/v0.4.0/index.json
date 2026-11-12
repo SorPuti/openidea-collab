@@ -1,0 +1,49 @@
+{
+  "format": 1,
+  "publishers": [
+    {
+      "id": "sorputi",
+      "name": "sorputi",
+      "keys": [
+        {
+          "key": "iOotDkLZMlVddJwa7xmuzLE03rq3JzYkOMKkbFatsKY=",
+          "revoked": false
+        }
+      ]
+    }
+  ],
+  "plugins": [
+    {
+      "id": "sorputi.openidea-collab",
+      "name": "OpenIDEA Collab",
+      "version": "0.4.0",
+      "description": "Realtime collaboration for explicitly shared OpenIDEA documents through collab.synthosia.com.",
+      "authors": [
+        "OpenIDEA Collab contributors"
+      ],
+      "publisher": "sorputi",
+      "download": "https://github.com/SorPuti/openidea-collab/releases/download/v0.4.0/sorputi.openidea-collab-0.4.0.oiplugin",
+      "digest": "4276e4a7458d557bf617afb7a2510d1603007e3bc76b09b2ab5f65d349c8d592",
+      "capabilities": [
+        "project.read",
+        "editor.read",
+        "editor.write",
+        "events",
+        "storage",
+        "secrets",
+        "net:collab.synthosia.com"
+      ],
+      "engine": "^1.6, ^1.6",
+      "categories": [
+        "tools"
+      ],
+      "icon": null,
+      "homepage": null,
+      "notes": "Experimental project-bound WSS collaboration with explicit document sharing and versioned editor updates.",
+      "downloads": null,
+      "featured": false,
+      "suggest": []
+    }
+  ],
+  "revoked": []
+}
