@@ -10,7 +10,7 @@ The change includes the editor-to-plugin event bridge, WIT and Rust SDK APIs, mo
 
 ## How it was verified
 
-After rebasing onto API 1.6 (`8d56f2c`):
+After rebasing onto merged API 1.6 (`8dcfdf6`):
 
 - `cargo test --manifest-path sdk/rust/openidea-plugin/Cargo.toml` — 62 passed, including document/WebSocket mock and API freeze/WIT coverage tests
 - `pnpm test --run src/editor/core/model/document.test.ts` — 27 passed

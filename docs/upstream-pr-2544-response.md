@@ -1,7 +1,7 @@
 Thanks — split completed.
 
 - #2544 is now only the generic WebSocket transport: WIT connect/send/drain/close, capability checks, project/plugin binding, lifecycle cleanup, bounded inboxes, `websocket-ready`, SDK wrapper, and mock. Its head is `85b0639`.
-- Document subscriptions are in draft [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610) at `8d56f2c`; it contains one commit on top of #2544 and remains dependent until the transport is merged.
+- Document subscriptions are in draft [PR #2610](https://github.com/l0ng-ai/openidea/pull/2610) at `8dcfdf6`; it contains one commit on top of the merged #2544 transport.
 - The approved `tokio-tungstenite` transport now reuses OpenIDEA's existing rustls configuration with ring and the platform verifier; it does not select another crypto provider.
 - The #2544 description has been rewritten around the socket API and records the commands and runner limitations precisely.
 
