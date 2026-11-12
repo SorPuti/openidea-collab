@@ -7,6 +7,7 @@ cd "$ROOT"
 : "${OPENIDEA_PUBLISHER:?Set the publisher ID (sorputi)}"
 : "${OPENIDEA_DOWNLOAD_BASE:?Set the versioned release download URL}"
 : "${RELEASE_TAG:?Set the exact source tag, for example v0.3.0}"
+CLI="${OPENIDEA_PLUGIN_CLI:-openidea-plugin}"
 [[ "$OPENIDEA_PUBLISHER" == sorputi ]] || { echo "Publisher must be sorputi" >&2; exit 1; }
 python3 src/tooling/verify-release.py --tag "$RELEASE_TAG"
 # An absolute key path continues to work after changing the working directory.
@@ -26,9 +27,9 @@ git archive "$RELEASE_TAG" | tar -x -C "$STAGE"
 cd "$STAGE"
 ./src/tooling/package-dev.sh
 mkdir -p "$DIST_DIR"
-openidea-plugin pack target/plugin-package --key "$KEY_FILE" --publisher "$OPENIDEA_PUBLISHER" --out "$DIST_DIR/$PACKAGE_FILE"
-openidea-plugin check "$DIST_DIR/$PACKAGE_FILE"
-openidea-plugin index "$DIST_DIR" --publisher "$OPENIDEA_PUBLISHER" --key "$KEY_FILE" \
+"$CLI" pack target/plugin-package --key "$KEY_FILE" --publisher "$OPENIDEA_PUBLISHER" --out "$DIST_DIR/$PACKAGE_FILE"
+"$CLI" check "$DIST_DIR/$PACKAGE_FILE"
+"$CLI" index "$DIST_DIR" --publisher "$OPENIDEA_PUBLISHER" --key "$KEY_FILE" \
   --download-base "$OPENIDEA_DOWNLOAD_BASE" --out "$DIST_DIR/index.json"
 # Preserve the development installer bundle format, with license and README.
 tar -czf "$DIST_DIR/plugin.tar.gz" -C target/plugin-package plugin.toml README.md LICENSE NOTICE dist locales
