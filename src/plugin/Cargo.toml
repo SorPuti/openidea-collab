@@ -7,6 +7,9 @@ publish = false
 
 # Built by the repository workspace; distribution contains a single WASM component.
 
+[features]
+experimental-remote-edits = []
+
 [lib]
 name = "openidea_collab"
 crate-type = ["cdylib", "rlib"]

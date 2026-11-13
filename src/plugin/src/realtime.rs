@@ -11,11 +11,13 @@ use openidea_collab_core::{
     transfer::{Reassembly, split},
 };
 use openidea_collab_protocol::{Endpoint, Frame, Kind, Role, SUBPROTOCOL};
+#[cfg(feature = "experimental-remote-edits")]
+use openidea_plugin::TextEdit;
 use openidea_plugin::{
     DocumentChanged, Error, Event, Project,
     host::{self, WebSocket, WebSocketRequest},
 };
-#[cfg(test)]
+#[cfg(any(test, feature = "experimental-remote-edits"))]
 use openidea_plugin::{Position, Range};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -433,6 +435,7 @@ impl Realtime {
         Ok(())
     }
 
+    #[cfg(not(feature = "experimental-remote-edits"))]
     fn apply_remote(
         &mut self,
         _project: &Project,
@@ -454,6 +457,57 @@ impl Realtime {
         Err(Error::Denied(
             "Remote document application is disabled pending host no-follow protection".into(),
         ))
+    }
+
+    #[cfg(feature = "experimental-remote-edits")]
+    fn apply_remote(
+        &mut self,
+        project: &Project,
+        document_id: Uuid,
+        update: &[u8],
+    ) -> Result<(), Error> {
+        let document = self
+            .documents
+            .get_mut(&document_id)
+            .expect("document checked before apply");
+        validate_relative(&document.shared.path)?;
+        let current = project.document(&document.absolute)?;
+        if document.initialized && document.crdt.text() != current.text {
+            return Err(Error::Invalid(
+                "Local document changed before remote update; local content was preserved".into(),
+            ));
+        }
+        let mut staged =
+            CrdtDocument::restore(&document.crdt.checkpoint(self.project), self.project)
+                .map_err(collab_error)?;
+        staged.receive(update).map_err(collab_error)?;
+        let next = staged.text();
+        if !document.initialized && !current.text.is_empty() && current.text != next {
+            return Err(Error::Invalid(
+                "Initial document contents differ; local content was preserved".into(),
+            ));
+        }
+        let version = if current.text != next {
+            let (from, to, insert) = single_edit(&current.text, &next);
+            project.apply_document_edits(
+                &document.shared.path,
+                current.version,
+                &[TextEdit {
+                    range: Range::new(
+                        utf16_position(&current.text, from)?,
+                        utf16_position(&current.text, to)?,
+                    ),
+                    text: insert.to_owned(),
+                }],
+            )?
+        } else {
+            current.version
+        };
+        document.crdt = staged;
+        document.editor_version = version;
+        document.initialized = true;
+        persist_checkpoint(self.session_id, document_id, self.project, &document.crdt)?;
+        Ok(())
     }
 }
 
@@ -564,6 +618,30 @@ fn single_edit<'a>(current: &str, target: &'a str) -> (u32, u32, &'a str) {
     )
 }
 
+#[cfg(feature = "experimental-remote-edits")]
+fn utf16_position(text: &str, offset: u32) -> Result<Position, Error> {
+    let mut units = 0;
+    let mut line = 0;
+    let mut character = 0;
+    for ch in text.chars() {
+        if units == offset {
+            return Ok(Position::new(line, character));
+        }
+        units += ch.len_utf16() as u32;
+        if ch == '\n' {
+            line += 1;
+            character = 0;
+        } else {
+            character += ch.len_utf16() as u32;
+        }
+    }
+    if units == offset {
+        Ok(Position::new(line, character))
+    } else {
+        Err(Error::Invalid("Invalid UTF-16 edit boundary".into()))
+    }
+}
+
 #[cfg(test)]
 fn whole_document(text: &str) -> Range {
     let mut line = 0;
@@ -610,5 +688,14 @@ mod tests {
         replace_crdt_text(&mut document, "A😀βC").unwrap();
         assert_eq!(document.text(), "A😀βC");
         assert_eq!(whole_document("A😀\nβ").end, Position::new(1, 1));
+    }
+
+    #[cfg(feature = "experimental-remote-edits")]
+    #[test]
+    fn remote_edit_positions_respect_unicode_and_newlines() {
+        let text = "A😀\nβZ";
+        assert_eq!(utf16_position(text, 3).unwrap(), Position::new(0, 3));
+        assert_eq!(utf16_position(text, 4).unwrap(), Position::new(1, 0));
+        assert!(utf16_position(text, 2).is_err());
     }
 }

@@ -183,8 +183,7 @@ fn already_revoked_membership_can_be_forgotten_without_retaining_credentials() {
     assert!(state::load().unwrap().is_none());
 }
 
-#[test]
-fn document_change_flows_to_websocket_and_remote_edit_is_refused_without_ack() {
+fn remote_edit_case(local_conflict: bool, write_denied: bool) {
     let mock = mock();
     mock.open_editor("/project/src/main.rs", "rust", "hello", &[]);
     mock.on_fetch(|request| {
@@ -303,6 +302,16 @@ fn document_change_flows_to_websocket_and_remote_edit_is_refused_without_ack() {
             .any(|frame| frame.kind == Kind::Update)
     );
 
+    if local_conflict {
+        let current = project.document("src/main.rs").unwrap();
+        let local_edit = TextEdit {
+            range: Range::new(Position::new(0, 6), Position::new(0, 6)),
+            text: " unsent".into(),
+        };
+        project
+            .apply_document_edits("src/main.rs", current.version, &[local_edit])
+            .unwrap();
+    }
     let operation = peer.edit(6, 6, " remote").unwrap();
     let update = peer.operation(operation).unwrap().update.clone();
     let sender = Uuid::parse_str("33333333-3333-4333-8333-333333333333").unwrap();
@@ -311,6 +320,18 @@ fn document_change_flows_to_websocket_and_remote_edit_is_refused_without_ack() {
         delivery.extend_from_slice(&frame);
         mock.push_websocket_message(socket.id, &delivery).unwrap();
     }
+    let mock = if write_denied {
+        mock.with_capabilities(&[
+            "storage",
+            "secrets",
+            "project.read",
+            "editor.read",
+            "events",
+            "net:collab.synthosia.com",
+        ])
+    } else {
+        mock
+    };
     plugin.handle_events(
         &[Event::WebSocketReady(WebSocketReady {
             plugin_id: "sorputi.openidea-collab".into(),
@@ -319,25 +340,65 @@ fn document_change_flows_to_websocket_and_remote_edit_is_refused_without_ack() {
         &mock.invocation(),
     );
 
-    assert_eq!(mock.editor_text(), "hello!");
-    assert_eq!(
-        mock.notifications().last().unwrap().title,
-        "Collaboration update refused"
-    );
-    assert!(
-        !mock
-            .websockets()
-            .iter()
-            .flat_map(|socket| &socket.sent)
-            .map(|bytes| Frame::decode(bytes).unwrap())
-            .any(|frame| frame.kind == Kind::Ack)
-    );
+    let ack = mock
+        .websockets()
+        .iter()
+        .flat_map(|socket| &socket.sent)
+        .map(|bytes| Frame::decode(bytes).unwrap())
+        .any(|frame| frame.kind == Kind::Ack);
+    if local_conflict || write_denied || !cfg!(feature = "experimental-remote-edits") {
+        assert_eq!(
+            mock.editor_text(),
+            if local_conflict {
+                "hello! unsent"
+            } else {
+                "hello!"
+            }
+        );
+        assert!(!ack);
+        assert_eq!(
+            mock.notifications().last().unwrap().title,
+            "Collaboration update refused"
+        );
+    } else {
+        assert_eq!(mock.editor_text(), "hello! remote");
+        assert!(ack);
+    }
+    drop(plugin);
 }
 
+#[cfg(not(feature = "experimental-remote-edits"))]
 #[test]
-fn differing_initial_content_is_preserved_without_acknowledging_remote_snapshot() {
+fn document_change_flows_to_websocket_and_remote_edit_is_refused_without_ack() {
+    remote_edit_case(false, false);
+}
+
+#[cfg(feature = "experimental-remote-edits")]
+#[test]
+fn remote_edit_updates_editor_and_sends_ack() {
+    remote_edit_case(false, false);
+}
+
+#[cfg(feature = "experimental-remote-edits")]
+#[test]
+fn pending_local_edit_is_not_overwritten_or_acknowledged() {
+    remote_edit_case(true, false);
+}
+
+#[cfg(feature = "experimental-remote-edits")]
+#[test]
+fn denied_editor_write_preserves_document_and_does_not_acknowledge() {
+    remote_edit_case(false, true);
+}
+
+fn initial_snapshot_case(local_empty: bool) {
     let mock = mock();
-    mock.open_editor("/project/src/main.rs", "rust", "local work", &[]);
+    mock.open_editor(
+        "/project/src/main.rs",
+        "rust",
+        if local_empty { "" } else { "local work" },
+        &[],
+    );
     let credential = serde_json::from_value(json!({
         "session_id":"11111111-1111-4111-8111-111111111111",
         "member_id":"22222222-2222-4222-8222-222222222222",
@@ -391,17 +452,33 @@ fn differing_initial_content_is_preserved_without_acknowledging_remote_snapshot(
         &mock.invocation(),
     );
 
-    assert_eq!(mock.editor_text(), "local work");
-    assert!(host::storage::keys("checkpoint/").unwrap().is_empty());
-    assert_eq!(
-        mock.notifications().last().unwrap().title,
-        "Collaboration update refused"
-    );
-    assert!(
-        !mock.websockets()[0]
-            .sent
-            .iter()
-            .map(|bytes| Frame::decode(bytes).unwrap())
-            .any(|frame| frame.kind == Kind::Ack)
-    );
+    let ack = mock.websockets()[0]
+        .sent
+        .iter()
+        .map(|bytes| Frame::decode(bytes).unwrap())
+        .any(|frame| frame.kind == Kind::Ack);
+    if local_empty {
+        assert_eq!(mock.editor_text(), "remote work");
+        assert!(!host::storage::keys("checkpoint/").unwrap().is_empty());
+        assert!(ack);
+    } else {
+        assert_eq!(mock.editor_text(), "local work");
+        assert!(host::storage::keys("checkpoint/").unwrap().is_empty());
+        assert_eq!(
+            mock.notifications().last().unwrap().title,
+            "Collaboration update refused"
+        );
+        assert!(!ack);
+    }
+}
+
+#[test]
+fn differing_initial_content_is_preserved_without_acknowledging_remote_snapshot() {
+    initial_snapshot_case(false);
+}
+
+#[cfg(feature = "experimental-remote-edits")]
+#[test]
+fn empty_document_accepts_initial_remote_snapshot_and_acknowledges() {
+    initial_snapshot_case(true);
 }
