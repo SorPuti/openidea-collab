@@ -2,7 +2,7 @@
 
 Open-source collaboration for [OpenIDEA](https://github.com/l0ng-ai/openidea), using a small authenticated relay at **collab.synthosia.com**. MIT licensed.
 
-**Status:** the relay, authenticated WSS forwarding and an experimental native realtime plugin are implemented. The plugin uses OpenIDEA's released API 1.6 from [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43). Remote document application is disabled until OpenIDEA releases tested no-follow protection for this API; inbound updates are refused rather than written. The signed 0.4.1 package is under marketplace review; install it only from the marketplace entry once that review is complete.
+**Status:** authenticated WSS forwarding and the experimental native realtime plugin are implemented. The Marketplace lists signed release 0.4.4; source is preparing 0.4.6. The plugin uses OpenIDEA's released API 1.6 from [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43). Incoming remote edits remain refused rather than written until the host's tested no-follow protection for final and ancestor links, VCS and IDE control directories is released. The relay at `collab.synthosia.com` must be operational for sessions to be created; if it is unavailable, sharing stops safely and the plugin displays an actionable connection error.
 
 ## Install as a collaborator
 
