@@ -1,6 +1,6 @@
 # Implementation status
 
-Target domain: **collab.synthosia.com**. Source version: plugin 0.4.7-dev.1 (development build); signed package version: 0.4.4; relay 0.2.0. The relay must return `/healthz` 204 before a session can be prepared; a CDN 522 means its origin needs operator attention. This is a short functional check, not a soak test or security audit.
+Target domain: **collab.synthosia.com**. Source version: plugin 0.4.8-dev.1 (development build); installed signed package version: 0.4.6; relay 0.2.0. The relay must return `/healthz` 204 before a session can be prepared; a CDN 522 means its origin needs operator attention. This is a short functional check, not a soak test or security audit.
 
 | Workstream | Status |
 | --- | --- |

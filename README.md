@@ -2,7 +2,7 @@
 
 Open-source collaboration for [OpenIDEA](https://github.com/l0ng-ai/openidea), using a small authenticated relay at **collab.synthosia.com**. MIT licensed.
 
-**Status:** the development source `0.4.7-dev.1` enables inbound edits for explicitly shared documents and requests `editor.write`. This is an unreviewed development build, not the signed Marketplace release. OpenIDEA v0.1.44 predates the upstream no-follow fix; using this build there permits remote edits without that protection. Real IDE acceptance and the save path are not yet verified. The relay at `collab.synthosia.com` must be operational for sessions to be created.
+**Status:** the development source `0.4.8-dev.1` enables inbound edits for explicitly shared documents and requests `editor.write`. This is an unreviewed development build, not the signed Marketplace release. OpenIDEA v0.1.44 predates the upstream no-follow fix; using this build there permits remote edits without that protection. Real IDE acceptance and the save path are not yet verified. The relay at `collab.synthosia.com` must be operational for sessions to be created.
 
 ## Install as a collaborator
 
