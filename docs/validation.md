@@ -21,9 +21,11 @@ sha256sum target/wasm32-wasip2/release/openidea_collab.wasm
 # c6e26a0597f442b446b7e95342ef7ce25f52ad93eb98c0d344a98f7567e33f02
 ```
 
-That component is 890179 bytes. The release process for subsequent versions
-must choose and document one stable remap prefix before packaging; replacing a
-published tag or release asset is never an acceptable way to repair provenance.
+That component is 890179 bytes. For subsequent versions, `package-dev.sh` maps
+the active Cargo home to the stable `/usr/local/cargo` prefix by default. An
+independent build can use the same mapping with
+`OPENIDEA_REMAP_CARGO_PREFIX=/usr/local/cargo`; replacing a published tag or
+release asset is never an acceptable way to repair provenance.
 
 The suites cover single-use invitations under concurrent redemption, viewer/owner roles, authenticated sender stamping, registered-document/room boundaries, revoked open sockets, oversized frames, metadata restart without credentials/content, failed metadata commits, queue overflow, malformed protocol, exact-origin invites, UTF-16/convergence, checkpoint corruption/project mismatch, chunk reordering and unsafe path policy. Plugin/SDK tests also prove activation sends no files, project changes cannot reuse a session, exact document filters are installed, local committed text reaches an outbound CRDT frame, and an inbound peer update reaches the versioned editor and produces an ACK.
 

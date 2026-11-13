@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# Rust retains dependency source locations in this Wasm component.  Canonicalize
+# Cargo's otherwise user-specific prefix so release bytes can be reproduced on
+# a different machine.  Callers may override the stable public prefix, but not
+# disable the mapping accidentally.
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+remap_prefix="${OPENIDEA_REMAP_CARGO_PREFIX:-/usr/local/cargo}"
+export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=${cargo_home}=${remap_prefix}"
 cargo build --locked --release -p openidea-plugin-openidea-collab --target wasm32-wasip2
 target_dir="${CARGO_TARGET_DIR:-target}"
 package_dir="target/plugin-package"
