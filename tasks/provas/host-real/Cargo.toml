@@ -1,0 +1,13 @@
+[package]
+name = "collab-host-proof"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+ide-host = { git = "https://github.com/l0ng-ai/openidea", tag = "v0.1.40" }
+ide-core = { git = "https://github.com/l0ng-ai/openidea", tag = "v0.1.40" }
+ide-plugin = { git = "https://github.com/l0ng-ai/openidea", tag = "v0.1.40" }
+tempfile = "3"

@@ -1,0 +1,8 @@
+[package]
+name = "collab-yrs-prova"
+version = "0.0.0"
+edition = "2021"
+publish = false
+[workspace]
+[dependencies]
+yrs = "=0.28.0"

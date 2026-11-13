@@ -6,3 +6,12 @@
 *.oiplugin
 __pycache__/
 .openidea/
+
+# Local artifacts from older collaboration experiments and separate checkouts.
+/collab-core/target/
+/collab-helper/target/
+/collab-server/target/
+/openidea-collab/target/
+/openidea-collab/dist/
+/construtor/state/
+/openidea-plugins/
