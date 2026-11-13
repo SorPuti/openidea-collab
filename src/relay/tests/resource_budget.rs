@@ -1,4 +1,4 @@
-//! Opt-in Linux process benchmark; not an IDE or internet latency benchmark.
+//! Opt-in Linux process benchmark with current room limits; not an IDE or internet latency benchmark.
 use futures_util::{SinkExt, StreamExt};
 use openidea_collab_protocol::{
     CreateInvite, Endpoint, Frame, Invite, Kind, Role, SUBPROTOCOL, SessionCredential,
@@ -34,7 +34,7 @@ fn rss(pid: u32) -> usize {
 }
 #[tokio::test]
 #[ignore = "opt-in process/RSS benchmark on Linux"]
-async fn sixteen_connections_with_bounded_relay_memory() {
+async fn twelve_connections_with_bounded_relay_memory() {
     if !cfg!(target_os = "linux") {
         return;
     }
@@ -100,7 +100,7 @@ async fn sixteen_connections_with_bounded_relay_memory() {
         .error_for_status()
         .unwrap();
         let mut members = vec![owner];
-        for _ in 0..3 {
+        for _ in 0..2 {
             let invitation: Invite = http
                 .post(format!(
                     "{origin}/v1/sessions/{}/invitations",
@@ -198,7 +198,7 @@ async fn sixteen_connections_with_bounded_relay_memory() {
     }
     samples.sort_unstable();
     println!(
-        "relay_process connections=16 rooms=4 messages=400 deliveries=1200 payload_bytes=1024 sampled_peak_rss_kib={peak_rss} p50_fanout_us={} p95_fanout_us={} max_fanout_us={}",
+        "relay_process connections=12 rooms=4 messages=400 deliveries=800 payload_bytes=1024 sampled_peak_rss_kib={peak_rss} p50_fanout_us={} p95_fanout_us={} max_fanout_us={}",
         samples[samples.len() / 2],
         samples[samples.len() * 95 / 100],
         samples[samples.len() - 1]
