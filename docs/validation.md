@@ -4,6 +4,27 @@ Run `./src/tooling/check.sh`. It validates metadata/provenance tests, formatting
 
 Package check: with the official OpenIDEA v0.1.43 `openidea-plugin` CLI available, run `./src/tooling/package-dev.sh`. This verifies the staged development package, not a publisher signature or marketplace installation.
 
+## WASM provenance
+
+Rust embeds dependency source locations in the optimized Wasm component. A plain
+build therefore differs when Cargo's home directory differs, even with the same
+locked source and compiler. The signed `v0.4.6` package was built with Cargo
+sources rooted at `/home/bugson/.cargo`. The following independently reproduces
+its `dist/plugin.wasm` byte-for-byte from commit
+`3046649469a757219f8469f1a6133a87bf63be30`:
+
+```sh
+RUSTFLAGS="--remap-path-prefix=$HOME/.cargo=/home/bugson/.cargo" \
+  cargo +1.96.0 build --locked --release \
+  -p openidea-plugin-openidea-collab --target wasm32-wasip2
+sha256sum target/wasm32-wasip2/release/openidea_collab.wasm
+# c6e26a0597f442b446b7e95342ef7ce25f52ad93eb98c0d344a98f7567e33f02
+```
+
+That component is 890179 bytes. The release process for subsequent versions
+must choose and document one stable remap prefix before packaging; replacing a
+published tag or release asset is never an acceptable way to repair provenance.
+
 The suites cover single-use invitations under concurrent redemption, viewer/owner roles, authenticated sender stamping, registered-document/room boundaries, revoked open sockets, oversized frames, metadata restart without credentials/content, failed metadata commits, queue overflow, malformed protocol, exact-origin invites, UTF-16/convergence, checkpoint corruption/project mismatch, chunk reordering and unsafe path policy. Plugin/SDK tests also prove activation sends no files, project changes cannot reuse a session, exact document filters are installed, local committed text reaches an outbound CRDT frame, and an inbound peer update reaches the versioned editor and produces an ACK.
 
 ## Required actual IDE acceptance
