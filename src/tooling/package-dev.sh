@@ -12,6 +12,14 @@ if [[ -d src/plugin/icons ]]; then
   cp src/plugin/icons/*.svg "$package_dir/icons/"
 fi
 cp "$target_dir/wasm32-wasip2/release/openidea_collab.wasm" "$package_dir/dist/plugin.wasm"
+# A manifest contribution is only usable when the component exports the
+# optional WIT interface. `openidea-plugin check` validates the manifest but
+# intentionally permits components without views, so catch a future macro
+# regression before a package reaches the Marketplace.
+if ! grep -aq 'openidea:plugin/view-provider@1.6.0#render' "$package_dir/dist/plugin.wasm"; then
+  printf '%s\n' 'plugin.wasm does not export the required view-provider interface' >&2
+  exit 1
+fi
 cp LICENSE NOTICE "$package_dir/"
 cp docs/plugin.md "$package_dir/README.md"
 if [[ -n "${COLLAB_RELAY_HOST:-}" ]]; then

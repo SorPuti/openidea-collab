@@ -435,4 +435,8 @@ impl Views for CollabPlugin {
         Ok(())
     }
 }
-register_plugin!(CollabPlugin);
+// Declaring a contributed view in plugin.toml is not enough: the component
+// must explicitly export the optional `view-provider` WIT interface.  Keep
+// this capability declaration beside the implementation so a future manifest
+// change cannot produce a panel that the host cannot render.
+register_plugin!(CollabPlugin, views);
