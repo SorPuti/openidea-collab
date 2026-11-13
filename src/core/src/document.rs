@@ -251,6 +251,18 @@ impl Document {
 mod tests {
     use super::*;
     #[test]
+    fn document_text_limit_is_one_mibibyte() {
+        let at_limit = "x".repeat(MAX_TEXT);
+        assert_eq!(
+            Document::from_text(&at_limit).unwrap().text().len(),
+            MAX_TEXT
+        );
+        assert!(matches!(
+            Document::from_text(&(at_limit + "x")),
+            Err("document limit")
+        ));
+    }
+    #[test]
     fn concurrent_unicode_edits_converge_and_duplicate_updates_are_safe() {
         let mut a = Document::default();
         a.edit(0, 0, "A😀B").unwrap();
