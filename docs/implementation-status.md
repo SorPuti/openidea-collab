@@ -1,6 +1,6 @@
 # Implementation status
 
-Target domain: **collab.synthosia.com**. Source version: plugin 0.4.6 (unreleased); signed package version: 0.4.4; relay 0.2.0. The relay must return `/healthz` 204 before a session can be prepared; a CDN 522 means its origin needs operator attention. This is a short functional check, not a soak test or security audit.
+Target domain: **collab.synthosia.com**. Source version: plugin 0.4.7-dev.1 (development build); signed package version: 0.4.4; relay 0.2.0. The relay must return `/healthz` 204 before a session can be prepared; a CDN 522 means its origin needs operator attention. This is a short functional check, not a soak test or security audit.
 
 | Workstream | Status |
 | --- | --- |
@@ -12,7 +12,7 @@ Target domain: **collab.synthosia.com**. Source version: plugin 0.4.6 (unrelease
 | UTF-16 Yrs core, bounded chunks, project-bound checkpoints/outbox | Implemented and tested |
 | Explicit selected-document collaboration | Implemented in the plugin; exact path filters, no scan/watcher/polling |
 | Local editor change → CRDT → host queue → WSS | Implemented; SDK integration test proves the plugin flow and upstream host tests prove bounded queue delivery |
-| WSS → local editor transaction | Intentionally disabled: released host lacks tested no-follow protection for remote document writes; inbound updates are refused without ACK |
+| WSS → local editor transaction | Enabled in development source; mock-host tests pass. OpenIDEA v0.1.44 lacks the later no-follow fix, and real IDE acceptance is unverified. |
 | Initial mismatch/stale write protection | Implemented: local content is preserved, conflict surfaced, refused work retained for recovery |
 | Project/session isolation and keychain credential | Implemented and tested |
 | Host API | API 1.6 is released in [OpenIDEA v0.1.43](https://github.com/l0ng-ai/openidea/releases/tag/v0.1.43), including [#2544](https://github.com/l0ng-ai/openidea/pull/2544) project-bound WSS and [#2610](https://github.com/l0ng-ai/openidea/pull/2610) project-relative document events/versioned editor access. The plugin pins the official tag. |
