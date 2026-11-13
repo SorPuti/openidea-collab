@@ -139,6 +139,27 @@ fn declined_consent_and_unexpected_invitation_hosts_do_not_send_requests() {
 }
 
 #[test]
+fn unreachable_relay_is_reported_as_an_actionable_panel_error() {
+    let mock = mock();
+    mock.on_fetch(|_| Err(openidea_plugin::Error::Failed("transport failure".into())));
+    mock.answer_next_prompt(Some(&["yes"]));
+    let mut plugin = CollabPlugin::default();
+    Views::handle(
+        &mut plugin,
+        "collab-panel",
+        ViewEvent::Button("create-session".into()),
+        &mock.invocation(),
+    )
+    .unwrap();
+    let view = Views::render(&mut plugin, "collab-panel", None, &mock.invocation()).unwrap();
+    let Body::Html(page) = view.body else {
+        panic!("Collab panel must be sandboxed HTML");
+    };
+    assert!(page.contains("Could not reach the collaboration relay"));
+    assert!(!page.contains("transport failure"));
+}
+
+#[test]
 fn already_revoked_membership_can_be_forgotten_without_retaining_credentials() {
     let mock = mock();
     state::save(&mock.invocation(), "https://collab.synthosia.com".into(), serde_json::from_value(json!({

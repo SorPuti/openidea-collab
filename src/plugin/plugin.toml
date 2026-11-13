@@ -1,10 +1,10 @@
 id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
-version = "0.4.5"
+version = "0.4.6"
 description = "Realtime collaboration for explicitly shared OpenIDEA documents through collab.synthosia.com."
 authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
-change-notes = "Redesigns the Collaboration panel with functional onboarding, session, documents, activity and settings sections. Remote document application remains disabled pending host no-follow guarantees."
+change-notes = "Adds a functional collaboration panel and clear relay-unavailable guidance. Remote document application remains disabled pending host no-follow guarantees."
 categories = ["tools"]
 icon = "icons/collab.svg"
 engines.openidea = "^1.6"

@@ -38,7 +38,12 @@ fn request(
     if admission && host::secret_is_set(ADMISSION_SECRET) {
         req = req.header("x-collab-admission", "{{secret:relay-admission}}");
     }
-    let response = host::fetch(&req)?;
+    let response = host::fetch(&req).map_err(|_| {
+        Error::Failed(
+            "Could not reach the collaboration relay. Check the relay URL and its availability, then try again."
+                .into(),
+        )
+    })?;
     if method == "DELETE" && response.status == 401 {
         return Ok(Vec::new());
     }
