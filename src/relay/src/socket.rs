@@ -64,6 +64,7 @@ async fn run_socket(relay: Relay, principal: Principal, socket: WebSocket) {
             principal.member,
             Live {
                 connection,
+                connected_at: now(),
                 session: principal.session,
                 sender,
                 kick,
@@ -71,6 +72,8 @@ async fn run_socket(relay: Relay, principal: Principal, socket: WebSocket) {
         ) {
             let _ = previous.kick.send(true);
         }
+        observability::connection_event("connected", principal, connection);
+        observability::snapshot(&registry);
     }
     let (mut output, mut input) = socket.split();
     let mut input_kick = kicked.clone();
@@ -128,13 +131,16 @@ async fn run_socket(relay: Relay, principal: Principal, socket: WebSocket) {
     };
     tokio::pin!(reader, writer);
     tokio::select! { _ = &mut reader => {}, _ = &mut writer => {} }
-    if let Ok(mut registry) = relay.inner.registry.lock()
-        && registry
+    if let Ok(mut registry) = relay.inner.registry.lock() {
+        if registry
             .live
             .get(&principal.member)
             .is_some_and(|live| live.connection == connection)
-    {
-        registry.live.remove(&principal.member);
+        {
+            registry.live.remove(&principal.member);
+        }
+        observability::connection_event("disconnected", principal, connection);
+        observability::snapshot(&registry);
     }
 }
 async fn send_bounded<S>(

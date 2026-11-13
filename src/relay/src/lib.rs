@@ -1,5 +1,6 @@
 //! Bounded, authenticated relay. Only authorization metadata is persisted.
 mod control;
+mod observability;
 mod persistence;
 mod socket;
 use axum::{
@@ -102,6 +103,7 @@ struct Invitation {
 #[derive(Clone)]
 struct Live {
     connection: Uuid,
+    connected_at: u64,
     session: Uuid,
     sender: mpsc::Sender<Delivery>,
     kick: watch::Sender<bool>,
@@ -151,6 +153,13 @@ fn bearer(headers: &HeaderMap) -> ApiResult<[u8; 32]> {
     Ok(hash(value))
 }
 impl Relay {
+    /// Emits a bounded snapshot of unexpired sessions and currently registered sockets.
+    pub fn log_presence_snapshot(&self) {
+        if let Ok(registry) = self.inner.registry.lock() {
+            observability::snapshot(&registry);
+        }
+    }
+
     fn require_admission(&self, headers: &HeaderMap) -> ApiResult<()> {
         let Some(expected) = self.inner.admission else {
             return Ok(());
@@ -360,6 +369,7 @@ impl Relay {
                     let _ = live.kick.send(true);
                 }
             }
+            observability::snapshot(&registry);
             Ok(value)
         })
         .await
@@ -506,6 +516,7 @@ mod tests {
             registry.live.insert(
                 recipient,
                 Live {
+                    connected_at: now(),
                     connection: Uuid::new_v4(),
                     session: session_id,
                     sender,

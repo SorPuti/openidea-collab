@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""Display the latest bounded relay snapshot from the local system journal."""
+import datetime
+import json
+import subprocess
+import sys
+import time
+
+unit = "openidea-collab.service"
+status = subprocess.run(["systemctl", "is-active", "--quiet", unit], check=False)
+result = subprocess.run(
+    ["journalctl", "-u", unit, "--since", "2 minutes ago", "-o", "cat", "--no-pager"],
+    text=True, capture_output=True, check=False,
+)
+if result.returncode:
+    sys.exit("Não foi possível ler o journal; execute com sudo.")
+snapshot = None
+for line in result.stdout.splitlines():
+    try:
+        entry = json.loads(line)
+    except (ValueError, TypeError):
+        continue
+    if isinstance(entry, dict) and entry.get("event") == "snapshot":
+        snapshot = entry
+if status.returncode or not snapshot or time.time() - snapshot.get("timestamp", 0) > 90:
+    sys.exit("Estado atual indisponível: serviço inativo ou retrato desatualizado.")
+def date(timestamp):
+    return datetime.datetime.fromtimestamp(timestamp).astimezone().strftime("%d/%m/%Y %H:%M:%S %Z")
+print("Retrato:", date(snapshot["timestamp"]))
+print("Sessões válidas:", len(snapshot["sessions"]))
+for session in snapshot["sessions"]:
+    print(f"\nSessão: {session['session_id']} | expira: {date(session['expires_at'])}")
+    print(f"Participantes registrados: {session['registered_members']} | conectados: {len(session['connected'])}")
+    for member in session['connected']:
+        print(f"  participante: {member['member_id']} | função: {member['role']} | entrou: {date(member['connected_at'])} | conexão: {member['connection_id']}")
