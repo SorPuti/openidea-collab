@@ -54,7 +54,7 @@ Reassembly is a client operation: up to four in-flight transfers, 64 chunks, 2 M
 
 ## Resource defaults
 
-- Four sessions, three members per session, sixteen sockets globally. HTTP handling is capped at 32 in-flight requests and five seconds per request. Metadata writes are serialized on one blocking operation.
+- Sixteen sessions, three members per session, sixty-four sockets globally. HTTP handling is capped at 32 in-flight requests and five seconds per request. Metadata writes are serialized on one blocking operation.
 - Sixty-four registered document IDs per session; sixteen live invitations.
 - Four queued messages per recipient; 64 KiB per client message plus sender envelope on output.
 - Input token buckets: 60 frames/s with burst 120; 256 KiB/s with burst 512 KiB.

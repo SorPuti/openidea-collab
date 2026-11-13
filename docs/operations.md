@@ -33,7 +33,7 @@ The supplied systemd unit reads `/etc/openidea-collab/admission.env`; create it 
 
 This is admission control, not an identity, billing or abuse-reporting system. Keep the global rate/session caps, rate-limit at the reverse proxy, monitor creation failures and revoke leaked admission tokens. Test TLS certificates, WSS upgrade, idle timeouts, revocation, blocked/slow clients, restart and quotas. No automatic room scaling, cluster or permanent free hosting is implied.
 
-A candidate memory budget is 64 MiB RSS for the relay process; the global socket cap is sixteen, while four rooms of three members normally permit twelve distinct members. The example systemd hard limit is 96 MiB to allow headroom; both are targets until measured. Measure Caddy and total host usage separately. A local forwarding benchmark is not an IDE latency benchmark.
+A candidate memory budget is 64 MiB RSS for the relay process; the global socket cap is 64, while 16 rooms of three members permit at most 48 distinct members. The example systemd hard limit is 96 MiB to allow headroom; both are targets until measured. Measure Caddy and total host usage separately. A local forwarding benchmark is not an IDE latency benchmark.
 
 ## GitHub Actions deployment
 
@@ -41,7 +41,7 @@ A candidate memory budget is 64 MiB RSS for the relay process; the global socket
 
 The repository variable `COLLAB_DEPLOY_HOST` names the fixed public host. The repository secrets `COLLAB_DEPLOY_SSH_KEY` and `COLLAB_DEPLOY_KNOWN_HOSTS` contain the restricted deployment identity and the verified host key. On the VM, `deploy/activate-relay.sh` and `deploy/ssh-relay-dispatch.sh` must be installed root-owned at `/usr/local/sbin/openidea-collab-activate` and `/usr/local/sbin/openidea-collab-dispatch` respectively. The forced SSH key must have `restrict` and invoke the dispatcher; only the activation helper may run via sudo. Changes to those root-owned scripts require a separate reviewed operator installation: a repository change alone does not update the server helper.
 
-A health check is not an end-to-end collaboration test. Restarting disconnects active clients. Rollback restores the executable only: it does not reverse metadata schema migrations or restore document contents. Review state compatibility before merging a version that changes persistent metadata; use a tested backup and migration procedure for incompatible changes. The relay does not store document contents and cannot recover them by itself. A static IP should be assigned to the Lightsail instance before relying on unattended deployments; update the variable and verified SSH host key if the endpoint changes.
+A health check is not an end-to-end collaboration test. Restarting disconnects active clients. Rollback restores the executable only: it does not reverse metadata schema migrations or restore document contents. Review state compatibility before merging a version that changes persistent metadata; use a tested backup and migration procedure for incompatible changes. The relay does not store document contents and cannot recover them by itself. Relay binaries predating the 16-session limit cannot load metadata containing more than four sessions. Do not roll back to those binaries while such sessions exist; restoring older metadata would discard later membership changes. A static IP should be assigned to the Lightsail instance before relying on unattended deployments; update the variable and verified SSH host key if the endpoint changes.
 
 ## Presence logs
 

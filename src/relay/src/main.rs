@@ -1,3 +1,4 @@
+use axum::serve::ListenerExt;
 use collab_server::Relay;
 use openidea_collab_protocol::DEFAULT_ORIGIN;
 use std::{net::SocketAddr, path::PathBuf};
@@ -39,6 +40,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             interval.tick().await;
             reporter.log_presence_snapshot();
+        }
+    });
+    let listener = listener.tap_io(|stream| {
+        if let Err(error) = stream.set_nodelay(true) {
+            eprintln!("failed to set TCP_NODELAY: {error}");
         }
     });
     axum::serve(listener, app)
