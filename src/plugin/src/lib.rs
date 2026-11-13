@@ -7,14 +7,14 @@ use openidea_collab_protocol::{DEFAULT_ORIGIN, Role};
 use openidea_plugin::{
     Context, Error, Event, EventKind, Invocation, NotificationLevel, Plugin, Project, host,
     register_plugin,
-    views::{Body, Button, View, ViewEvent, Viewport, Views},
+    views::{Body, View, ViewEvent, Viewport, Views},
 };
 const PANEL: &str = "collab-panel";
 fn ready_status() -> &'static str {
     if host::locale().starts_with("pt") {
-        "Sessão preparada. Conecte o realtime e compartilhe explicitamente o documento aberto."
+        "Sessão preparada. Conecte o realtime para revisar os documentos abertos juntos."
     } else {
-        "Session prepared. Connect realtime, then explicitly share the open document."
+        "Session prepared. Connect realtime to review and share open documents together."
     }
 }
 #[derive(Default)]
@@ -76,13 +76,19 @@ impl Plugin for CollabPlugin {
                     client::join(&relay, invitation.trim())?
                 };
                 state::save(ctx, relay, credential)?;
-                self.connect(ctx)?;
+                self.connect_and_offer_open_documents(ctx)?;
             }
             "create-invite" => {
                 let session = state::for_project(ctx)?
                     .ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
                 if session.role != Role::Owner {
                     return Err(Error::Denied("Only the session owner can invite".into()));
+                }
+                if !host::confirm(
+                    "Create collaboration invitation",
+                    "Create a single-use editor invitation valid for five minutes? Anyone who receives it can join this collaboration session.",
+                )? {
+                    return Ok(None);
                 }
                 self.invitation =
                     Some(client::invite(&session.relay, &session.session_id.to_string())?.url);
@@ -106,7 +112,7 @@ impl Plugin for CollabPlugin {
                 }
                 self.invitation = None;
             }
-            "connect-realtime" => self.connect(ctx)?,
+            "connect-realtime" => self.connect_and_offer_open_documents(ctx)?,
             "disconnect-realtime" => self.disconnect()?,
             "share-current-document" => self.share_current(ctx)?,
             "share-open-documents" => self.share_open_documents(ctx)?,
@@ -209,6 +215,14 @@ impl CollabPlugin {
         Ok(())
     }
 
+    /// A session never scans the project.  After an explicit connection action,
+    /// present the already-open, eligible documents together so the user can
+    /// approve one bounded sharing decision rather than repeat it per tab.
+    fn connect_and_offer_open_documents(&mut self, ctx: &Invocation) -> Result<(), Error> {
+        self.connect(ctx)?;
+        self.share_open_documents_if_available(ctx)
+    }
+
     fn disconnect(&mut self) -> Result<(), Error> {
         self.realtime = None;
         host::unsubscribe(EventKind::DocumentChanged);
@@ -219,7 +233,7 @@ impl CollabPlugin {
         let editor = ctx
             .editor()
             .ok_or_else(|| Error::Invalid("Focus the document you want to share".into()))?;
-        self.share_paths(ctx, vec![editor.path()], "Share document")
+        self.share_paths(ctx, vec![editor.path()], "Share document", false)
     }
 
     /// Shares only eligible documents already opened by the user. This never
@@ -229,7 +243,15 @@ impl CollabPlugin {
             .into_iter()
             .map(|editor| editor.path)
             .collect();
-        self.share_paths(ctx, paths, "Share open documents")
+        self.share_paths(ctx, paths, "Share open documents", false)
+    }
+
+    fn share_open_documents_if_available(&mut self, ctx: &Invocation) -> Result<(), Error> {
+        let paths = host::open_editors()?
+            .into_iter()
+            .map(|editor| editor.path)
+            .collect();
+        self.share_paths(ctx, paths, "Share open documents", true)
     }
 
     fn share_paths(
@@ -237,6 +259,7 @@ impl CollabPlugin {
         ctx: &Invocation,
         paths: Vec<String>,
         title: &str,
+        allow_empty: bool,
     ) -> Result<(), Error> {
         self.connect(ctx)?;
         let project = ctx
@@ -261,6 +284,9 @@ impl CollabPlugin {
             }
         }
         if pending.is_empty() {
+            if allow_empty {
+                return Ok(());
+            }
             return Err(Error::Invalid(
                 "No additional eligible open documents to share".into(),
             ));
@@ -387,58 +413,13 @@ impl Views for CollabPlugin {
             self.panel_error.as_deref(),
             self.invitation.as_deref(),
             &self.activity,
+            self.realtime
+                .as_ref()
+                .map(realtime::Realtime::observed_peers)
+                .unwrap_or_default(),
         )));
-        for candidate in [
-            panel::Page::Start,
-            panel::Page::Session,
-            panel::Page::Documents,
-            panel::Page::Activity,
-            panel::Page::Settings,
-        ] {
-            page = page.button(
-                Button::new(&format!("view:{}", candidate.id()), candidate.label())
-                    .enabled(candidate != self.page),
-            );
-        }
-        match session {
-            Ok(Some(session)) => {
-                if session.role == Role::Owner {
-                    page = page.button(Button::new("create-invite", "Criar convite").icon("add"));
-                }
-                if self.realtime.is_some() {
-                    page = page
-                        .button(
-                            Button::new("share-current-document", "Compartilhar documento")
-                                .icon("add"),
-                        )
-                        .button(
-                            Button::new("share-open-documents", "Compartilhar abertos").icon("add"),
-                        )
-                        .button(
-                            Button::new("stop-sharing-current-document", "Parar compartilhamento")
-                                .icon("remove"),
-                        )
-                        .button(
-                            Button::new("disconnect-realtime", "Desconectar realtime")
-                                .icon("debug-disconnect"),
-                        );
-                } else {
-                    page = page.button(
-                        Button::new("connect-realtime", "Conectar realtime").icon("debug-connect"),
-                    );
-                }
-                page = page.button(Button::new("leave-session", "Sair da sessão").icon("close"));
-            }
-            Ok(None) => {
-                page = page
-                    .button(Button::new("create-session", "Preparar sessão").icon("add"))
-                    .button(Button::new("join-session", "Aceitar convite").icon("arrow-right"));
-            }
-            Err(_) => {
-                page = page
-                    .status("Abra um projeto ou encerre a sessão vinculada ao projeto anterior.")
-                    .button(Button::new("leave-session", "Sair da sessão anterior").icon("close"));
-            }
+        if session.is_err() {
+            page = page.status("Abra o projeto desta sessão ou use Sair da sessão no painel.");
         }
         Ok(page)
     }
@@ -469,6 +450,30 @@ impl Views for CollabPlugin {
                     self.page = page;
                     self.panel_error = None;
                     host::refresh_view(PANEL);
+                }
+                let action = parsed
+                    .as_ref()
+                    .filter(|value| {
+                        value.get("op").and_then(serde_json::Value::as_str) == Some("action")
+                    })
+                    .and_then(|value| value.get("id").and_then(serde_json::Value::as_str));
+                if let Some(action) = action.filter(|id| {
+                    matches!(
+                        *id,
+                        "create-session"
+                            | "join-session"
+                            | "create-invite"
+                            | "leave-session"
+                            | "connect-realtime"
+                            | "disconnect-realtime"
+                            | "share-current-document"
+                            | "share-open-documents"
+                            | "stop-sharing-current-document"
+                    )
+                }) {
+                    // HTML is untrusted presentation. Sensitive commands retain their
+                    // native confirmation prompts before they can use network or files.
+                    self.panel_command(action, ctx);
                 }
             }
             _ => {}

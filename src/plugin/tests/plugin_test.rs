@@ -90,6 +90,27 @@ fn collaboration_panel_navigates_in_the_sandbox_without_granting_network_to_mess
     assert!(settings.contains("Relay atual"));
     assert!(mock.requests().is_empty());
 }
+
+#[test]
+fn panel_actions_still_require_native_confirmation_before_network_use() {
+    let mock = mock();
+    let mut plugin = CollabPlugin::default();
+    plugin
+        .activate(&mock.context("sorputi.openidea-collab"))
+        .unwrap();
+
+    // HTML is presentation only: an untrusted message cannot create a relay
+    // session when the native confirmation is declined or absent.
+    Views::handle(
+        &mut plugin,
+        "collab-panel",
+        ViewEvent::Message(r#"{"op":"action","id":"create-session"}"#.into()),
+        &mock.invocation(),
+    )
+    .unwrap();
+
+    assert!(mock.requests().is_empty());
+}
 #[test]
 fn credentials_are_kept_in_keychain_and_project_switch_does_not_reuse_session() {
     let mock = mock();
@@ -214,12 +235,9 @@ fn remote_edit_case(local_conflict: bool, write_denied: bool) {
     plugin
         .activate(&mock.context("sorputi.openidea-collab"))
         .unwrap();
-    plugin
-        .run_command("connect-realtime", &mock.invocation(), None)
-        .unwrap();
     mock.answer_next_prompt(Some(&["yes"]));
     plugin
-        .run_command("share-open-documents", &mock.invocation(), None)
+        .run_command("connect-realtime", &mock.invocation(), None)
         .unwrap();
 
     let socket = mock.websockets().remove(0);

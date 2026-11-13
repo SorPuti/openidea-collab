@@ -48,6 +48,7 @@ pub struct Realtime {
     role: Role,
     documents: HashMap<Uuid, LiveDocument>,
     by_path: HashMap<String, Uuid>,
+    peers: HashSet<Uuid>,
     reassembly: Reassembly,
     status: String,
 }
@@ -83,6 +84,7 @@ impl Realtime {
             role: session.role,
             documents: HashMap::new(),
             by_path: HashMap::new(),
+            peers: HashSet::new(),
             reassembly: Reassembly::default(),
             status: "Connected".into(),
         };
@@ -114,6 +116,13 @@ impl Realtime {
             .collect();
         paths.sort();
         paths
+    }
+
+    /// Peers are learned only from relay-authenticated frames. The relay does
+    /// not expose a roster endpoint, so this is deliberately a count of peers
+    /// observed in the active connection rather than a guessed member list.
+    pub fn observed_peers(&self) -> usize {
+        self.peers.len()
     }
 
     pub fn add_document(&mut self, project: &Project, shared: SharedDocument) -> Result<(), Error> {
@@ -375,6 +384,7 @@ impl Realtime {
         if sender == self.member_id {
             return Err(Error::Invalid("Relay echoed a member's own update".into()));
         }
+        self.peers.insert(sender);
         let frame = Frame::decode(&bytes[16..]).map_err(collab_error)?;
         if !frame.target.is_nil() && frame.target != self.member_id {
             return Err(Error::Invalid("Relay frame targets another member".into()));

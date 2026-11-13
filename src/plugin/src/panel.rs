@@ -56,6 +56,7 @@ pub fn html(
     error: Option<&str>,
     invitation: Option<&str>,
     activity: &[String],
+    observed_peers: usize,
 ) -> String {
     let nav = [
         Page::Start,
@@ -84,8 +85,14 @@ pub fn html(
     let state = realtime_status.unwrap_or("Preparada para conectar");
     let content = match page {
         Page::Start => start(session, relay),
-        Page::Session => session_page(session, state, invitation),
-        Page::Documents => documents(session),
+        Page::Session => session_page(
+            session,
+            state,
+            invitation,
+            realtime_status.is_some(),
+            observed_peers,
+        ),
+        Page::Documents => documents(session, realtime_status.is_some()),
         Page::Activity => activity_page(activity),
         Page::Settings => settings(relay),
     };
@@ -114,11 +121,12 @@ h1 {{ margin:6px 0 8px; font-size:23px; line-height:1.16; letter-spacing:-.035em
 .notice {{ margin-bottom:14px; border-radius:9px; padding:10px 11px; font-size:12px; }} .notice.error {{ background:color-mix(in srgb,var(--danger) 11%,transparent); color:var(--danger); }}
 .grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }} .label {{ color:var(--muted); font-size:11px; }} .value {{ margin-top:3px; font-weight:600; overflow-wrap:anywhere; }}
 .hint {{ margin-top:14px; color:var(--muted); font-size:12px; }} code {{ font:11px ui-monospace,SFMono-Regular,monospace; }}
+.actions {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }} .action {{ border:1px solid var(--line); border-radius:8px; background:var(--soft); color:inherit; padding:7px 10px; font:inherit; font-weight:600; cursor:pointer; }} .action.primary {{ background:var(--accent); border-color:var(--accent); color:white; }} .action.danger {{ color:var(--danger); }} .action:hover {{ filter:brightness(1.08); }}
 @media (max-width:360px) {{ .grid {{ grid-template-columns:1fr; }} h1 {{ font-size:21px; }} }}
 </style>
 <header class="top"><div class="brand"><span class="mark">C</span>OpenIDEA Collab</div><div class="state"><span class="dot"></span>{state}</div></header>
 <nav class="tabs" aria-label="Colaboração">{nav}</nav>{notice}{content}
-<script>function go(page){{openidea.postMessage(JSON.stringify({{op:'page',page:page}}));}}</script>
+<script>function go(page){{openidea.postMessage(JSON.stringify({{op:'page',page:page}}));}}function action(id){{openidea.postMessage(JSON.stringify({{op:'action',id:id}}));}}</script>
 </main>"#,
         state = escape(state),
     )
@@ -126,37 +134,67 @@ h1 {{ margin:6px 0 8px; font-size:23px; line-height:1.16; letter-spacing:-.035em
 
 fn start(session: Option<&Session>, relay: &str) -> String {
     if session.is_some() {
-        return "<section class=\"hero\"><div class=\"eyebrow\">Sessão preparada</div><h1>Você já pode iniciar a colaboração.</h1><p>Use as abas para acompanhar pessoas, documentos compartilhados e atividade.</p></section>".into();
+        return "<section class=\"hero\"><div class=\"eyebrow\">Sessão preparada</div><h1>Você já pode iniciar a colaboração.</h1><p>Conecte o realtime: os documentos atualmente abertos são apresentados juntos para confirmação, sem selecionar arquivo por arquivo.</p><div class=\"actions\"><button class=\"action primary\" onclick=\"action('connect-realtime')\">Conectar e revisar abertos</button></div></section>".into();
     }
     format!(
-        "<section class=\"hero\"><div class=\"eyebrow\">Colaboração explícita</div><h1>Edite junto. Compartilhe apenas o que escolher.</h1><p>Prepare uma sessão ou aceite um convite. O plugin nunca varre o projeto: somente documentos abertos e confirmados entram na sessão.</p></section><section class=\"card steps\"><div class=\"row\"><span class=\"num\">1</span><div class=\"row-main\"><div class=\"row-title\">Prepare ou entre</div><div class=\"detail\">Cada participante recebe sua própria credencial.</div></div></div><div class=\"row\"><span class=\"num\">2</span><div class=\"row-main\"><div class=\"row-title\">Conecte o realtime</div><div class=\"detail\">A conexão usa TLS com {}</div></div></div><div class=\"row\"><span class=\"num\">3</span><div class=\"row-main\"><div class=\"row-title\">Confirme os documentos</div><div class=\"detail\">O conteúdo só é compartilhado após a confirmação.</div></div></div></section>",
+        "<section class=\"hero\"><div class=\"eyebrow\">Colaboração explícita</div><h1>Edite junto, com controle real.</h1><p>Prepare uma sessão ou aceite um convite. O plugin só apresenta os documentos já abertos para uma confirmação única; ele nunca varre o projeto.</p><div class=\"actions\"><button class=\"action primary\" onclick=\"action('create-session')\">Criar sessão</button><button class=\"action\" onclick=\"action('join-session')\">Aceitar convite</button></div></section><section class=\"card steps\"><div class=\"row\"><span class=\"num\">1</span><div class=\"row-main\"><div class=\"row-title\">Prepare ou entre</div><div class=\"detail\">Cada participante recebe sua própria credencial.</div></div></div><div class=\"row\"><span class=\"num\">2</span><div class=\"row-main\"><div class=\"row-title\">Conecte o realtime</div><div class=\"detail\">A conexão usa TLS com {}</div></div></div><div class=\"row\"><span class=\"num\">3</span><div class=\"row-main\"><div class=\"row-title\">Confirme os documentos abertos</div><div class=\"detail\">Uma única confirmação adiciona os documentos elegíveis de uma vez.</div></div></div></section>",
         escape(relay)
     )
 }
 
-fn session_page(session: Option<&Session>, state: &str, invitation: Option<&str>) -> String {
+fn session_page(
+    session: Option<&Session>,
+    state: &str,
+    invitation: Option<&str>,
+    connected: bool,
+    observed_peers: usize,
+) -> String {
     let Some(session) = session else {
         return "<section class=\"card\"><h2>Nenhuma sessão neste projeto</h2><p>Volte a Começar para preparar uma sessão ou aceitar um convite.</p></section>".into();
     };
     let invite = invitation.map(|url| format!("<div class=\"row\"><div class=\"row-main\"><div class=\"row-title\">Convite criado</div><div class=\"detail\"><code>{}</code></div></div></div>", escape(url))).unwrap_or_default();
+    let connection_action = if connected {
+        "<button class=\"action\" onclick=\"action('disconnect-realtime')\">Desconectar</button>"
+    } else {
+        "<button class=\"action primary\" onclick=\"action('connect-realtime')\">Conectar e revisar abertos</button>"
+    };
+    let invite_action = (session.role == openidea_collab_protocol::Role::Owner)
+        .then_some(
+            "<button class=\"action\" onclick=\"action('create-invite')\">Criar convite</button>",
+        )
+        .unwrap_or("");
+    let participants = if observed_peers == 0 {
+        "Somente você por enquanto".to_owned()
+    } else {
+        format!("Você + {observed_peers} colaborador(es) ativo(s)")
+    };
     format!(
-        "<section class=\"card\"><div class=\"grid\"><div><div class=\"label\">Papel</div><div class=\"value\">{:?}</div></div><div><div class=\"label\">Realtime</div><div class=\"value\">{}</div></div></div><div class=\"hint\">Convide até dois colaboradores. As ações ficam na barra superior do painel.</div>{}</section>",
+        "<section class=\"card\"><div class=\"grid\"><div><div class=\"label\">Seu papel</div><div class=\"value\">{:?}</div></div><div><div class=\"label\">Realtime</div><div class=\"value\">{}</div></div><div><div class=\"label\">Participantes observados</div><div class=\"value\">{}</div></div><div><div class=\"label\">Compartilhamento</div><div class=\"value\">{} documento(s)</div></div></div><div class=\"hint\">Até três participantes por sessão. Um colaborador aparece aqui depois de enviar uma atualização autenticada pelo relay.</div><div class=\"actions\">{}{}<button class=\"action danger\" onclick=\"action('leave-session')\">Sair da sessão</button></div>{}</section>",
         session.role,
         escape(state),
+        participants,
+        session.documents.len(),
+        connection_action,
+        invite_action,
         invite
     )
 }
 
-fn documents(session: Option<&Session>) -> String {
+fn documents(session: Option<&Session>, connected: bool) -> String {
     let Some(session) = session else {
         return "<section class=\"card\"><h2>Nenhum documento compartilhado</h2><p>Prepare uma sessão e confirme o documento aberto para começar.</p></section>".into();
     };
     let rows: String = if session.documents.is_empty() {
-        "<div class=\"row\"><div class=\"row-main\"><div class=\"row-title\">Nada compartilhado ainda</div><div class=\"detail\">Use “Compartilhar documento” na barra superior.</div></div></div>".into()
+        "<div class=\"row\"><div class=\"row-main\"><div class=\"row-title\">Nenhum documento compartilhado</div><div class=\"detail\">Adicione todos os documentos abertos de uma vez. Arquivos fechados nunca são varridos ou enviados.</div></div></div>".into()
     } else {
         session.documents.iter().map(|document| format!("<div class=\"row\"><span class=\"avatar\">↔</span><div class=\"row-main\"><div class=\"row-title\">{}</div><div class=\"detail\">Compartilhado explicitamente · sincronização protegida</div></div><span class=\"pill\">Ativo</span></div>", escape(&document.path))).collect()
     };
-    format!("<section class=\"card list\">{rows}</section>")
+    let action = if connected {
+        "<div class=\"actions\"><button class=\"action primary\" onclick=\"action('share-open-documents')\">Compartilhar documentos abertos</button><button class=\"action\" onclick=\"action('stop-sharing-current-document')\">Parar documento atual</button></div>"
+    } else {
+        "<div class=\"actions\"><button class=\"action primary\" onclick=\"action('connect-realtime')\">Conectar para compartilhar</button></div>"
+    };
+    format!("<section class=\"card list\">{rows}{action}</section>")
 }
 
 fn activity_page(activity: &[String]) -> String {
@@ -200,9 +238,11 @@ mod tests {
             None,
             None,
             &[],
+            0,
         );
         assert!(page.contains("openidea.postMessage"));
-        assert!(page.contains("Compartilhe apenas o que escolher"));
+        assert!(page.contains("Criar sessão"));
+        assert!(page.contains("action('create-session')"));
     }
 
     #[test]
@@ -228,6 +268,7 @@ mod tests {
             Some("<unsafe>"),
             None,
             &[],
+            0,
         );
         assert!(page.contains("&lt;script&gt;alert(1)&lt;/script&gt;.rs"));
         assert!(page.contains("&lt;unsafe&gt;"));
