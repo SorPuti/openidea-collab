@@ -3,7 +3,9 @@ use openidea_collab_core::{document::Document, transfer::split};
 use openidea_collab_protocol::{DEFAULT_ORIGIN, Frame, Kind};
 use openidea_plugin::{
     DocumentChanged, DocumentTextChange, Event, HttpResponse, Plugin, Position, Range, TextEdit,
-    WebSocketReady, host, mock::MockHost,
+    WebSocketReady, host,
+    mock::MockHost,
+    views::{Body, ViewEvent, Views},
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -57,6 +59,36 @@ fn installation_and_file_events_do_not_upload_or_write_anything() {
             .unwrap(),
         "PRIVATE"
     );
+}
+
+#[test]
+fn collaboration_panel_navigates_in_the_sandbox_without_granting_network_to_messages() {
+    let mock = mock();
+    let mut plugin = CollabPlugin::default();
+    plugin
+        .activate(&mock.context("sorputi.openidea-collab"))
+        .unwrap();
+
+    let start = Views::render(&mut plugin, "collab-panel", None, &mock.invocation()).unwrap();
+    let Body::Html(start) = start.body else {
+        panic!("Collab panel must be sandboxed HTML");
+    };
+    assert!(start.contains("Edite junto"));
+    assert!(start.contains("openidea.postMessage"));
+
+    Views::handle(
+        &mut plugin,
+        "collab-panel",
+        ViewEvent::Message(r#"{"op":"page","page":"settings"}"#.into()),
+        &mock.invocation(),
+    )
+    .unwrap();
+    let settings = Views::render(&mut plugin, "collab-panel", None, &mock.invocation()).unwrap();
+    let Body::Html(settings) = settings.body else {
+        panic!("Collab panel must remain sandboxed HTML");
+    };
+    assert!(settings.contains("Relay atual"));
+    assert!(mock.requests().is_empty());
 }
 #[test]
 fn credentials_are_kept_in_keychain_and_project_switch_does_not_reuse_session() {

@@ -1,12 +1,13 @@
 //! Explicitly scoped realtime collaboration over the project-bound host API.
 pub mod client;
+pub mod panel;
 pub mod realtime;
 pub mod state;
 use openidea_collab_protocol::{DEFAULT_ORIGIN, Role};
 use openidea_plugin::{
     Context, Error, Event, EventKind, Invocation, NotificationLevel, Plugin, Project, host,
     register_plugin,
-    views::{Body, Button, Field, FieldValue, View, ViewEvent, Viewport, Views},
+    views::{Body, Button, View, ViewEvent, Viewport, Views},
 };
 const PANEL: &str = "collab-panel";
 fn ready_status() -> &'static str {
@@ -20,6 +21,9 @@ fn ready_status() -> &'static str {
 pub struct CollabPlugin {
     invitation: Option<String>,
     realtime: Option<realtime::Realtime>,
+    page: panel::Page,
+    panel_error: Option<String>,
+    activity: Vec<String>,
 }
 impl Plugin for CollabPlugin {
     fn activate(&mut self, _context: &Context) -> Result<(), Error> {
@@ -139,6 +143,36 @@ impl Plugin for CollabPlugin {
 }
 
 impl CollabPlugin {
+    fn record(&mut self, message: impl Into<String>) {
+        self.activity.insert(0, message.into());
+        self.activity.truncate(8);
+    }
+
+    fn panel_command(&mut self, id: &str, ctx: &Invocation) {
+        match self.run_command(id, ctx, None) {
+            Ok(_) => {
+                self.panel_error = None;
+                self.record(match id {
+                    "create-session" => "Sessão preparada para este projeto",
+                    "join-session" => "Convite aceito para este projeto",
+                    "connect-realtime" => "Realtime conectado",
+                    "disconnect-realtime" => "Realtime desconectado",
+                    "share-current-document" => "Documento aberto compartilhado",
+                    "share-open-documents" => "Documentos abertos compartilhados",
+                    "stop-sharing-current-document" => "Documento removido da sessão",
+                    "leave-session" => "Sessão removida deste projeto",
+                    "create-invite" => "Convite de colaborador criado",
+                    _ => "Ação de colaboração concluída",
+                });
+            }
+            Err(error) => {
+                self.panel_error = Some(error.to_string());
+                self.record("Uma ação foi recusada; reveja os detalhes no painel");
+            }
+        }
+        host::refresh_view(PANEL);
+    }
+
     fn project(&self, ctx: &Invocation) -> Result<Project, Error> {
         let session =
             state::load()?.ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
@@ -336,91 +370,74 @@ impl Views for CollabPlugin {
         if view != PANEL {
             return Err(Error::NotFound("Unknown collaboration view".into()));
         }
-        let status = self.realtime.as_ref().map_or_else(
-            || ready_status().to_owned(),
-            |runtime| runtime.status().to_owned(),
-        );
-        let mut fields = vec![
-            Field::new(
-                "relay",
-                "Relay",
-                FieldValue::label(
-                    &client::relay_origin().unwrap_or_else(|_| DEFAULT_ORIGIN.into()),
-                ),
-            ),
-            Field::new("status", "Status", FieldValue::label(&status)),
-        ];
         let session = state::for_project(ctx);
         if !matches!(&session, Ok(Some(_))) {
             self.invitation = None;
         }
-        if let Some(invitation) = &self.invitation {
-            fields.push(Field::new(
-                "invitation",
-                "Invite one of up to two collaborators (single use, expires in 5 minutes)",
-                FieldValue::readonly_text(invitation, false),
-            ));
+        let status = self.realtime.as_ref().map_or_else(
+            || ready_status().to_owned(),
+            |runtime| runtime.status().to_owned(),
+        );
+        let relay = client::relay_origin().unwrap_or_else(|_| DEFAULT_ORIGIN.into());
+        let mut page = View::new(Body::Html(panel::html(
+            self.page,
+            session.as_ref().ok().and_then(Option::as_ref),
+            &relay,
+            self.realtime.as_ref().map(|_| status.as_str()),
+            self.panel_error.as_deref(),
+            self.invitation.as_deref(),
+            &self.activity,
+        )));
+        for candidate in [
+            panel::Page::Start,
+            panel::Page::Session,
+            panel::Page::Documents,
+            panel::Page::Activity,
+            panel::Page::Settings,
+        ] {
+            page = page.button(
+                Button::new(&format!("view:{}", candidate.id()), candidate.label())
+                    .enabled(candidate != self.page),
+            );
         }
-        if let Ok(Some(session)) = &session
-            && !session.documents.is_empty()
-        {
-            fields.push(Field::new(
-                "documents",
-                "Shared documents",
-                FieldValue::readonly_text(
-                    &session
-                        .documents
-                        .iter()
-                        .map(|document| document.path.as_str())
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                    true,
-                ),
-            ));
-        }
-        let mut page = View::new(Body::Form(fields));
         match session {
             Ok(Some(session)) => {
                 if session.role == Role::Owner {
-                    page =
-                        page.button(Button::new("create-invite", "Create Invitation").icon("add"));
+                    page = page.button(Button::new("create-invite", "Criar convite").icon("add"));
                 }
                 if self.realtime.is_some() {
                     page = page
                         .button(
-                            Button::new("share-current-document", "Share Current Document")
+                            Button::new("share-current-document", "Compartilhar documento")
                                 .icon("add"),
                         )
                         .button(
-                            Button::new("share-open-documents", "Share All Open Documents")
-                                .icon("add"),
+                            Button::new("share-open-documents", "Compartilhar abertos").icon("add"),
                         )
                         .button(
-                            Button::new(
-                                "stop-sharing-current-document",
-                                "Stop Sharing Current Document",
-                            )
-                            .icon("remove"),
+                            Button::new("stop-sharing-current-document", "Parar compartilhamento")
+                                .icon("remove"),
                         )
                         .button(
-                            Button::new("disconnect-realtime", "Disconnect Realtime")
+                            Button::new("disconnect-realtime", "Desconectar realtime")
                                 .icon("debug-disconnect"),
                         );
                 } else {
                     page = page.button(
-                        Button::new("connect-realtime", "Connect Realtime").icon("debug-connect"),
+                        Button::new("connect-realtime", "Conectar realtime").icon("debug-connect"),
                     );
                 }
-                page = page.button(Button::new("leave-session", "Leave Session").icon("close"));
+                page = page.button(Button::new("leave-session", "Sair da sessão").icon("close"));
             }
             Ok(None) => {
                 page = page
-                    .button(Button::new("create-session", "Prepare Session").icon("add"))
-                    .button(Button::new("join-session", "Accept Invitation").icon("arrow-right"));
+                    .button(Button::new("create-session", "Preparar sessão").icon("add"))
+                    .button(Button::new("join-session", "Aceitar convite").icon("arrow-right"));
             }
             Err(_) => {
-                page = page.status("Open a project, or leave the session associated with the previous project.")
-                .button(Button::new("leave-session", "Leave Previous Session").icon("close"));
+                page = page
+                    .status("Abra um projeto ou encerre a sessão vinculada ao projeto anterior.")
+                    .button(Button::new("leave-session", "Sair da sessão anterior").icon("close"));
             }
         }
         Ok(page)
@@ -429,8 +446,32 @@ impl Views for CollabPlugin {
         if view != PANEL {
             return Ok(());
         }
-        if let ViewEvent::Button(id) = event {
-            self.run_command(&id, ctx, None)?;
+        match event {
+            ViewEvent::Button(id) => {
+                if let Some(page) = id.strip_prefix("view:").and_then(panel::Page::parse) {
+                    self.page = page;
+                    self.panel_error = None;
+                    host::refresh_view(PANEL);
+                } else {
+                    self.panel_command(&id, ctx);
+                }
+            }
+            ViewEvent::Message(message) => {
+                let parsed = serde_json::from_str::<serde_json::Value>(&message).ok();
+                let page = parsed
+                    .as_ref()
+                    .filter(|value| {
+                        value.get("op").and_then(serde_json::Value::as_str) == Some("page")
+                    })
+                    .and_then(|value| value.get("page").and_then(serde_json::Value::as_str))
+                    .and_then(panel::Page::parse);
+                if let Some(page) = page {
+                    self.page = page;
+                    self.panel_error = None;
+                    host::refresh_view(PANEL);
+                }
+            }
+            _ => {}
         }
         Ok(())
     }
