@@ -1,6 +1,6 @@
 [package]
 name = "openidea-plugin-openidea-collab"
-version = "0.4.7"
+version = "0.4.8-dev.1"
 edition = "2024"
 license = "MIT"
 publish = false
@@ -8,6 +8,7 @@ publish = false
 # Built by the repository workspace; distribution contains a single WASM component.
 
 [features]
+default = ["experimental-remote-edits"]
 experimental-remote-edits = []
 
 [lib]

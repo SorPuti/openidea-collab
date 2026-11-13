@@ -1,16 +1,9 @@
-# Experimental remote document edits
+# Development remote editing build
 
-This branch prepares the incoming-edit path behind the opt-in Cargo feature `experimental-remote-edits`. The default build continues to refuse remote updates and does not request `editor.write`. The feature is for isolated tests only: **do not publish or install a feature-enabled build** while the host version cannot be checked and the release and acceptance work below remains incomplete. Enabling the feature by itself does not change the package manifest to request `editor.write`.
+The `0.4.8-dev.1` source enables inbound edits by default and requests `editor.write`. It is a development build; it has not passed actual two-IDE acceptance and is not the signed Marketplace release. The old refusal behavior can be built with `--no-default-features`.
 
-The candidate stages CRDT updates, refuses a mismatch with unprocessed local content, applies the smallest single versioned editor edit, checkpoints the CRDT and sends the peer ACK only after the host write and checkpoint succeed. Different nonempty initial content is preserved. These properties currently have mock-host tests, not real multi-IDE acceptance. Background edits in the host API are non-undoable.
+The user explicitly requested activation before a fixed official OpenIDEA release. OpenIDEA v0.1.44 does not include [upstream PR #3236](https://github.com/l0ng-ai/openidea/pull/3236). The old host does not enforce the later no-follow background-edit protection; linked paths or replacement races can cause edits to affect unintended content. Do not use real projects for validation. Remote edits are non-undoable in the host API.
 
-The upstream no-follow work was merged in [OpenIDEA PR #3236](https://github.com/l0ng-ai/openidea/pull/3236), but it was not present in the latest official `v0.1.44` release when checked on 2026-11-13. Both the v0.1.44 SDK and the upstream merge commit declare plugin API version 1.7, so the plugin cannot safely use that API version to distinguish them. The resolver checks existing path components for symlinks/reparse points; adversarial replacement races and the complete save path remain unverified here.
+The candidate stages CRDT updates, preserves mismatching local content, applies a minimal versioned editor edit and checkpoints before sending ACK. These properties are covered by mock-host tests, not a crash-durability or full IDE guarantee. There is no whole-project synchronization.
 
-Before enabling this in a distributable build: obtain a released host with the fix and a trustworthy enforceable host capability/version gate; request and review `editor.write`; test link/control-path and ancestor-race refusal through the actual host and save path; test failed checkpoint/write, concurrent changes, reconnect, undo expectations and UTF-16/IME; run an isolated two-machine IDE session and security review. Do not interpret SDK mock tests or a compiled WASM as proof of those items.
-
-Focused checks:
-
-```sh
-CARGO_BUILD_JOBS=1 cargo test --locked -p openidea-plugin-openidea-collab --features experimental-remote-edits
-CARGO_BUILD_JOBS=1 cargo test --locked -p openidea-plugin-openidea-collab
-```
+Before distributing a signed release: provide an enforceable host capability/version gate, use a released host containing the fix, validate symbolic link/control-path and ancestor races through the host and save path, test checkpoint/write failure and concurrent edits, and complete isolated multi-IDE acceptance.

@@ -20,11 +20,11 @@ The core stages a CRDT document before accepting remote changes so a malformed o
 
 ## Safety and lifecycle
 
-The plugin consumes the generic host implementation released in OpenIDEA v0.1.43. It has no file-save subscription or arbitrary project-write capability. It subscribes only to exact explicitly shared document paths. OpenIDEA has not yet released a no-follow resolver for remote document application, so this plugin refuses inbound updates rather than writing them. The unsafe legacy REST file store and automatic global-room restoration remain removed.
+The plugin consumes the generic host implementation released in OpenIDEA v0.1.43. It has no file-save subscription or arbitrary project-write capability. It subscribes only to exact explicitly shared document paths. The development build applies incoming updates; OpenIDEA v0.1.44 lacks the later no-follow resolver, and linked paths remain a material risk. The unsafe legacy REST file store and automatic global-room restoration remain removed.
 
 The local project identity is hashed for storage and never sent to the relay. All session and connection operations require that project; a project switch requires leaving explicitly. The plugin's lexical policy limits what can be proposed, while the host's repeated shared-document resolver enforces the filesystem boundary.
 
-Versioned local document events and nonfocused open documents are implemented. Remote application remains intentionally disabled; see [host-api.md](host-api.md).
+Versioned local document events and nonfocused open documents are implemented. Remote application is experimental; see [experimental-remote-edits.md](experimental-remote-edits.md).
 
 ## Durability
 

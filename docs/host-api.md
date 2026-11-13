@@ -8,7 +8,7 @@ API 1.6 adds project-bound `WebSocket::{connect, send, drain, close}`, `Project:
 
 The host owns transport tasks and queues. It requires WSS outside loopback, one declared secret-backed Authorization header, a granted exact network host and a negotiated subprotocol. Handles cannot be used from another project. Incoming and outgoing queues are bounded by frame count and bytes; overflow rejects the new frame, reports it as refused and closes the connection for resynchronization. Readiness notifications are coalesced, so no scheduled polling is required.
 
-Document access is limited to explicitly named open files and uses project-relative paths, grants and version checks. OpenIDEA v0.1.43 does not yet provide the no-follow resolver required to make a collaboration plugin's remote writes safe against symlink and ancestor races. Accordingly, this plugin does not call `apply-edits-at` for inbound network updates. A future host release must add and test that boundary before remote application can be enabled.
+Document access is limited to explicitly named open files and uses project-relative paths, grants and version checks. OpenIDEA v0.1.43 does not yet provide the no-follow resolver required to make a collaboration plugin's remote writes safe against symlink and ancestor races. The development build calls `apply-edits-at` for inbound updates at the user's request; the released host lacks the later protection, so linked-path and replacement-race risks remain.
 
 ## Open-source boundary
 
@@ -16,7 +16,7 @@ The upstream implementation is not tailored to this repository. It contains no r
 
 ## Evidence and remaining acceptance
 
-The upstream branch includes queue race/overflow tests, real loopback WebSocket transport tests, subscription isolation/cleanup, versioned editor tests, project-crossing refusals, SDK WIT coverage and a functional WebSocket mock. The plugin test proves local document event → CRDT → WebSocket and that inbound frames are refused without an editor write or ACK.
+The upstream branch includes queue race/overflow tests, real loopback WebSocket transport tests, subscription isolation/cleanup, versioned editor tests, project-crossing refusals, SDK WIT coverage and a functional WebSocket mock. Mock-host tests cover local document event → CRDT → WebSocket and inbound edits, conflict refusal and ACK behavior in the development build.
 
 Before an official plugin release, perform a real IDE acceptance pass with two/three profiles covering idle runtime reclamation, Unicode/IME, Undo/Redo, project close, grant revocation, reconnect, conflicts and bounded slow-client behavior.
 
