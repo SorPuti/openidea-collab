@@ -41,3 +41,17 @@ On 2026-11-10 a separate live smoke check created an owner and editor through HT
 Historical local validation on 2026-11-10 covered source/release guards, formatting, Clippy with warnings denied, 37 Rust tests (plus one opt-in resource test ignored), five Python release-guard tests and the optimized `wasm32-wasip2` build. On 2026-11-12, the plugin's 8 unit/integration tests and its optimized WASM build passed against the immutable official OpenIDEA `v0.1.43` SDK commit `7c51662`; the published `openidea-plugin 0.1.43` (API 1.6.0) accepted the staged package. The resulting WASM has SHA-256 `0c540fbcfb5109a55d691bc46a01fd335d0771e86848536082eff331700c1940`. This is package validation, not a publisher signature, installed-IDE acceptance, cross-platform execution or a marketplace approval.
 
 Remote GitHub Actions did not execute the PR job: the check annotation reports “The job was not started because your account is locked due to a billing issue.” Local results above are independent of that account-level blocker; no remote CI success is claimed.
+
+## Isolated VPS relay benchmark — 2026-11-13
+
+On the 512 MB Lightsail instance (2 vCPU, approximately 412 MiB available to the OS), `src/tooling/relay-load.py` launched a separate loopback relay using synthetic authorization metadata and synthetic payloads. It did not modify production sessions. Three paired 4-room/12-socket burst runs with 1 KiB messages showed p99 fanout completion around 39.5–39.7 ms before enabling TCP_NODELAY and 1.28–1.36 ms afterwards. These values include the Python load generator and are not internet or IDE latency.
+
+The candidate with 16-room/64-socket limits was tested at 16 rooms, three members each (48 sockets):
+
+| Synthetic workload | Duration | Delivered frames | Relay sampled peak RSS | Relay mean CPU | p95 fanout |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 400 × 1 KiB per room, 40 ms delay | 18.3 s | 12,800 | 9,784 KiB | 4.20% of one CPU | 4.51 ms |
+| 100 × 16 KiB per room, 100 ms delay | 13.5 s | 3,200 | 10,256 KiB | 2.07% of one CPU | 33.29 ms |
+| 30 × 60,000 bytes per room, 300 ms delay | 12.5 s | 960 | 11,656 KiB | not measured | 113.87 ms |
+
+The client and relay shared the same machine; Python masking and scheduling affect timings. The relay journal was discarded during these runs, and Caddy, TLS, real networks, IDE state, mixed traffic and long-term usage were not measured. The synthetic state was prepared ahead of time, so these runs do not measure session creation, invitation, metadata fsync or abuse-rate limits. An unpaced run at 150 frames per room timed out; its cause was not established, and rate or queue protections may have contributed. This is not a no-loss claim beyond the tested paced workload. These short tests do not guarantee behavior at sustained saturation or demonstrate whole-project synchronization.

@@ -40,9 +40,9 @@ use subtle::ConstantTimeEq;
 use tokio::sync::{Semaphore, mpsc, watch};
 use uuid::Uuid;
 
-pub const MAX_SESSIONS: usize = 4;
+pub const MAX_SESSIONS: usize = 16;
 pub const MAX_MEMBERS: usize = 3;
-pub const MAX_CONNECTIONS: usize = 16;
+pub const MAX_CONNECTIONS: usize = 64;
 pub const MAX_DOCUMENTS: usize = 64;
 pub const QUEUE_FRAMES: usize = 4;
 const MAX_INVITES: usize = 16;
@@ -547,6 +547,69 @@ mod tests {
             &Bytes::copy_from_slice(&data)
         ));
         assert!(*kicked.borrow());
+    }
+    #[tokio::test]
+    async fn session_creation_accepts_sixteen_and_refuses_seventeen() {
+        let relay = Relay::new("http://127.0.0.1:4444", None).unwrap();
+        {
+            let mut registry = relay.inner.registry.lock().unwrap();
+            for _ in 0..15 {
+                registry.metadata.sessions.insert(
+                    Uuid::new_v4(),
+                    Session {
+                        expires_at: now() + 3600,
+                        members: HashMap::new(),
+                        invitations: HashMap::new(),
+                        documents: HashSet::new(),
+                    },
+                );
+            }
+        }
+        let create = || {
+            control::create_session(
+                State(relay.clone()),
+                HeaderMap::new(),
+                Json(CreateSession { protocol: VERSION }),
+            )
+        };
+        assert!(create().await.is_ok());
+        assert!(matches!(
+            create().await,
+            Err(ApiError(StatusCode::TOO_MANY_REQUESTS, "session_limit"))
+        ));
+    }
+    #[test]
+    fn persisted_metadata_accepts_sixteen_sessions_but_rejects_seventeen() {
+        let directory = tempfile::tempdir().unwrap();
+        let file = directory.path().join("private/state.json");
+        let mut metadata = Metadata {
+            version: VERSION,
+            ..Default::default()
+        };
+        for _ in 0..16 {
+            metadata.sessions.insert(
+                Uuid::new_v4(),
+                Session {
+                    expires_at: now() + 3600,
+                    members: HashMap::new(),
+                    invitations: HashMap::new(),
+                    documents: HashSet::new(),
+                },
+            );
+        }
+        save_metadata(&file, &metadata).unwrap();
+        assert!(load_metadata(&file).is_ok());
+        metadata.sessions.insert(
+            Uuid::new_v4(),
+            Session {
+                expires_at: now() + 3600,
+                members: HashMap::new(),
+                invitations: HashMap::new(),
+                documents: HashSet::new(),
+            },
+        );
+        save_metadata(&file, &metadata).unwrap();
+        assert!(load_metadata(&file).is_err());
     }
     #[test]
     fn expired_credentials_are_not_authorized() {
