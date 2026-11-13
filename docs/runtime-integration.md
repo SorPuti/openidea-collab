@@ -30,12 +30,12 @@ versioned document event
   -> authenticated relay forwarding
   -> bounded host receive queue + websocket-ready
   -> chunk validation/reassembly
-  -> explicit refusal (no local editor write and no peer ACK)
+  -> stage update, apply versioned editor edit, persist checkpoint, send ACK
 ```
 
 Local events carry sorted non-overlapping offsets in the original document's UTF-16 coordinates. The core applies a batch in descending order as one CRDT transaction. If event versions skip, the runtime reconciles from the current versioned editor snapshot instead of applying offsets to the wrong base.
 
-Incoming updates are refused before CRDT or editor mutation. This preserves the selected local document and makes the sender retain its pending operation instead of treating a relay receipt as delivery. Remote document application stays disabled until the host has tested no-follow protection for final and ancestor links, including control directories.
+The development build applies inbound updates after conflict checks and acknowledges only after checkpointing. OpenIDEA v0.1.44 does not include the later no-follow host fix; linked-path and replacement-race risks remain. Real IDE acceptance and crash recovery are unverified.
 
 The relay stores no replay backlog. On reconnect, persisted pending operations are resent and state vectors request missing state from an online authorized peer. Disconnect clears the event path filter; leaving revokes membership and then removes the local credential/session.
 
