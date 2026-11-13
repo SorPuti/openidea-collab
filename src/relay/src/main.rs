@@ -33,6 +33,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         "OpenIDEA relay listening on {address}; content is transient, authorization metadata is persisted"
     );
     let app = relay.router();
+    let reporter = relay.clone();
+    let reporter_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            reporter.log_presence_snapshot();
+        }
+    });
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             #[cfg(unix)]
@@ -49,5 +57,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             relay.shutdown();
         })
         .await?;
+    reporter_task.abort();
     Ok(())
 }
