@@ -33,7 +33,7 @@ The supplied systemd unit reads `/etc/openidea-collab/admission.env`; create it 
 
 This is admission control, not an identity, billing or abuse-reporting system. Keep the global rate/session caps, rate-limit at the reverse proxy, monitor creation failures and revoke leaked admission tokens. Test TLS certificates, WSS upgrade, idle timeouts, revocation, blocked/slow clients, restart and quotas. No automatic room scaling, cluster or permanent free hosting is implied.
 
-A candidate memory budget is 64 MiB RSS for the relay process at its sixteen-connection cap. The example systemd hard limit is 96 MiB to allow headroom; both are targets until measured. Measure Caddy and total host usage separately. A local forwarding benchmark is not an IDE latency benchmark.
+A candidate memory budget is 64 MiB RSS for the relay process; the global socket cap is sixteen, while four rooms of three members normally permit twelve distinct members. The example systemd hard limit is 96 MiB to allow headroom; both are targets until measured. Measure Caddy and total host usage separately. A local forwarding benchmark is not an IDE latency benchmark.
 
 ## GitHub Actions deployment
 

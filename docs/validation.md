@@ -22,6 +22,10 @@ cargo test --locked -p collab-server --test resource_budget -- --ignored --nocap
 
 At 16 real WebSocket connections across 4 rooms, 400 messages of 1 KiB were fanned out into 1,200 deliveries. The separate relay process had a sampled peak RSS of **7,744 KiB (about 7.6 MiB)**; fanout completion p50 **194 µs**, p95 **511 µs**, maximum **33,218 µs**. The run lasted about 0.33 s. This is a short local functional/budget check, not a soak test, a CPU benchmark, a worst-case allocation bound or a latency guarantee. Kernel socket buffers, proxy TLS, clients and IDEs are outside this process RSS.
 
+The historical 16-connection setup above predates the current three-member room limit and is not reproducible with current limits: the old benchmark attempted four members per room and failed with HTTP 429.
+
+On 2026-11-13, the corrected benchmark ran four rooms with three members each, 400 synthetic 1 KiB messages and 800 deliveries. On the local Linux development machine, the unoptimized relay process reached a sampled peak of 8,308 KiB RSS, with fanout completion p50 40 µs, p95 56 µs, and maximum 40,633 µs. This was one short run, with journal output discarded and no TLS proxy, internet, actual IDE or VPS measurements; it is not a capacity or latency guarantee.
+
 The optional browser check was executed with Playwright and system Chromium:
 
 ```sh
