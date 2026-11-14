@@ -645,3 +645,43 @@ async fn room_has_three_members_and_refuses_extra_invites_and_members() {
         .unwrap();
     assert_eq!(info["max_members_per_session"], 3);
 }
+
+#[tokio::test]
+async fn streamed_binary_chunks_survive_real_websocket_relay() {
+    use openidea_collab_core::project_sync::{ChunkVerifier, FileVersion};
+    use std::io::{Read, Seek, Write};
+    let server = Server::start(None).await;
+    let owner = server.create().await;
+    let member = server.join(&owner, Role::Editor).await;
+    let document = server.document(&owner).await;
+    let mut sender = server.socket(&owner).await;
+    let mut receiver = server.socket(&member).await;
+    let data: Vec<u8> = (0..(3 * 1024 * 1024 + 17))
+        .map(|i| (i % 251) as u8)
+        .collect();
+    let mut check = ChunkVerifier::new(FileVersion::from_bytes(&data), data.len() as u64).unwrap();
+    let mut staged = tempfile::tempfile().unwrap();
+    let mut offset = 0;
+    for chunk in data.chunks(16 * 1024) {
+        sender
+            .send(Message::Binary(
+                frame(Kind::Update, document, member.member_id, chunk).into(),
+            ))
+            .await
+            .unwrap();
+        let received = binary(&mut receiver).await;
+        assert_eq!(&received[..16], owner.member_id.as_bytes());
+        let decoded = Frame::decode(&received[16..]).unwrap();
+        assert_eq!(decoded.payload, chunk);
+        check.push(offset, decoded.payload).unwrap();
+        staged.write_all(decoded.payload).unwrap();
+        offset += chunk.len() as u64;
+        tokio::time::sleep(Duration::from_millis(70)).await;
+    }
+    check.finish().unwrap();
+    staged.rewind().unwrap();
+    let mut staged_bytes = Vec::new();
+    staged.read_to_end(&mut staged_bytes).unwrap();
+    assert_eq!(staged_bytes, data);
+    assert_eq!(offset, data.len() as u64);
+}

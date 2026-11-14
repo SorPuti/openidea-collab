@@ -340,6 +340,11 @@ impl CollabPlugin {
         }
         let automatic = automatic_invocation && session.auto_share_open_documents;
         if !automatic {
+            let inbound = if cfg!(feature = "experimental-remote-edits") {
+                " Collaborators may also change these open editor buffers; background changes may not be undoable."
+            } else {
+                " Incoming collaborator edits are disabled."
+            };
             let future = if enable_auto_scope {
                 "\n\nApprove automatic sharing for future eligible documents you open in this project? Closed files are never scanned."
             } else {
@@ -348,7 +353,7 @@ impl CollabPlugin {
             if !host::confirm(
                 title,
                 &format!(
-                    "Share these {} document(s) with up to two authenticated collaborators? Their unsaved editor text and later edits will be transmitted through {DEFAULT_ORIGIN}.{}\n\n{}",
+                    "Share these {} document(s) with up to two authenticated collaborators? Their unsaved editor text and later edits will be transmitted through {DEFAULT_ORIGIN}.{inbound}{}\n\n{}",
                     pending.len(),
                     future,
                     pending

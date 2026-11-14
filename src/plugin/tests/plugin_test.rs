@@ -386,6 +386,70 @@ fn remote_edit_case(local_conflict: bool, write_denied: bool) {
     } else {
         assert_eq!(mock.editor_text(), "hello! remote");
         assert!(ack);
+        // A host event for the applied remote version must not echo it back.
+        let before = mock
+            .websockets()
+            .iter()
+            .find(|s| s.id == socket.id)
+            .unwrap()
+            .sent
+            .len();
+        let remote_version = project.document("src/main.rs").unwrap().version;
+        plugin.handle_events(
+            &[Event::DocumentChanged(DocumentChanged {
+                path: "src/main.rs".into(),
+                base_version: remote_version - 1,
+                version: remote_version,
+                changes: vec![DocumentTextChange {
+                    from: 6,
+                    to: 6,
+                    insert: " remote".into(),
+                }],
+            })],
+            &mock.invocation(),
+        );
+        assert_eq!(
+            mock.websockets()
+                .iter()
+                .find(|s| s.id == socket.id)
+                .unwrap()
+                .sent
+                .len(),
+            before
+        );
+        // A subsequent local edit must still be forwarded and converge with the peer.
+        let edit = TextEdit {
+            range: Range::new(Position::new(0, 13), Position::new(0, 13)),
+            text: "!".into(),
+        };
+        let version = project
+            .apply_document_edits("src/main.rs", remote_version, &[edit])
+            .unwrap();
+        plugin.handle_events(
+            &[Event::DocumentChanged(DocumentChanged {
+                path: "src/main.rs".into(),
+                base_version: remote_version,
+                version,
+                changes: vec![DocumentTextChange {
+                    from: 13,
+                    to: 13,
+                    insert: "!".into(),
+                }],
+            })],
+            &mock.invocation(),
+        );
+        let socket = mock
+            .websockets()
+            .into_iter()
+            .find(|s| s.id == socket.id)
+            .unwrap();
+        let update = socket.sent[before..]
+            .iter()
+            .map(|bytes| Frame::decode(bytes).unwrap())
+            .find(|frame| frame.kind == Kind::Update)
+            .unwrap();
+        peer.receive(update.payload).unwrap();
+        assert_eq!(peer.text(), "hello! remote!");
     }
     drop(plugin);
 }

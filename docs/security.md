@@ -6,11 +6,11 @@ The active server is a bounded authenticated relay, replacing the historical unr
 
 The relay only binds to loopback, expects a TLS reverse proxy at collab.synthosia.com, rejects credentials in socket queries and refuses browser-origin sockets. Metadata stores credential digests rather than bearer values. Content is never written to metadata or logs. End-to-end encryption is not implemented; a TLS-terminating operator can inspect transient traffic.
 
-The plugin asks only for the configured HTTPS origin, project/editor read, storage and declared keychain secrets. It never writes remote content: remote document application is disabled until OpenIDEA ships a no-follow resolver for this API. Installation/activation and save/scheduled events do not send requests. Legacy global room state is removed on activation and never resumed.
+The development plugin requests the configured HTTPS origin, project/editor read, editor.write, storage and declared keychain secrets. It can apply incoming changes to shared open editor buffers through versioned host edits. The signed 0.4.10 release still refuses incoming edits. Installation/activation and save/scheduled events do not send requests. Legacy global room state is removed on activation and never resumed.
 
 ## Remaining release blockers
 
-- Host-provided no-follow protection, including ancestor races and cross-platform links, before enabling any remote document application or project transfer. The standalone lexical policy does not solve this; therefore this package refuses inbound document updates without acknowledging them.
+- Test OpenIDEA 0.1.45 background-edit link checks, ancestor replacement races and the complete save path on actual hosts before a production release. The standalone lexical policy does not provide atomic no-follow filesystem access.
 - Explicit file scope preview, ignore handling, secret exclusions, safe bootstrap and conflicts before sending project content.
 - Real IDE installation, project-switch, refusal, revocation, offline/restart, undo and two-client tests.
 - Client core resource/fuzz/performance testing, independent security review and complete third-party notices.
