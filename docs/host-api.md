@@ -8,7 +8,7 @@ API 1.6 adds project-bound `WebSocket::{connect, send, drain, close}`, `Project:
 
 The host owns transport tasks and queues. It requires WSS outside loopback, one declared secret-backed Authorization header, a granted exact network host and a negotiated subprotocol. Handles cannot be used from another project. Incoming and outgoing queues are bounded by frame count and bytes; overflow rejects the new frame, reports it as refused and closes the connection for resynchronization. Readiness notifications are coalesced, so no scheduled polling is required.
 
-Document access is limited to explicitly named open files and uses project-relative paths, grants and version checks. OpenIDEA v0.1.43 does not yet provide the no-follow resolver required to make a collaboration plugin's remote writes safe against symlink and ancestor races. Accordingly, this plugin does not call `apply-edits-at` for inbound network updates. A future host release must add and test that boundary before remote application can be enabled.
+Document access is limited to explicitly named open files and uses project-relative paths, grants and version checks. The development build calls `apply-edits-at` and requires OpenIDEA v0.1.45 or newer, whose host checks background edit paths for links. Replacement races and the subsequent save path remain unverified; this is not safe project-wide file transfer.
 
 ## Open-source boundary
 
