@@ -36,6 +36,7 @@ pub(super) async fn info(State(relay): State<Relay>) -> Json<ServiceInfo> {
         max_frame_bytes: MAX_FRAME,
         max_transfer_bytes: MAX_TRANSFER,
         content_retention: "transient_forwarding_only".to_owned(),
+        project_frames: true,
     })
 }
 pub(super) async fn create_session(

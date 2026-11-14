@@ -227,6 +227,7 @@ async fn health_and_protocol_do_not_expose_content_or_legacy_file_routes() {
         .unwrap();
     assert_eq!(info["protocol"], 1);
     assert_eq!(info["content_retention"], "transient_forwarding_only");
+    assert_eq!(info["project_frames"], true);
     for path in ["/rooms", "/rooms/old/files/.git/config"] {
         assert_eq!(
             server
@@ -711,4 +712,16 @@ async fn project_channel_forwards_targeted_editor_frames_and_refuses_viewers() {
         .await
         .unwrap();
     closed(&mut viewer_socket).await;
+}
+
+#[test]
+fn old_relay_info_defaults_project_frame_support_to_false() {
+    let info: openidea_collab_protocol::ServiceInfo = serde_json::from_value(json!({
+        "protocol": 1, "max_members_per_session": 3,
+        "websocket_url": "wss://collab.synthosia.com/v1/socket",
+        "max_frame_bytes": 65536, "max_transfer_bytes": 2097152,
+        "content_retention": "transient_forwarding_only"
+    }))
+    .unwrap();
+    assert!(!info.project_frames);
 }

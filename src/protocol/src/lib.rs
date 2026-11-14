@@ -72,6 +72,8 @@ pub struct ServiceInfo {
     pub max_frame_bytes: usize,
     pub max_transfer_bytes: usize,
     pub content_retention: String,
+    #[serde(default)]
+    pub project_frames: bool,
 }
 
 /// URLs carry no credentials; fragments are only used for one-time invitations.
