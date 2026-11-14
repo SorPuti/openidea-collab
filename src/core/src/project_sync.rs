@@ -187,3 +187,143 @@ impl ChunkVerifier {
         Ok(())
     }
 }
+
+/// A complete, project-scoped inventory and version-conditional file access.
+/// Implementations must reject links/reparse points and paths outside the
+/// approved root without check/use races. A failed or truncated scan is an
+/// error, never a complete inventory. Reads must return exactly the named
+/// version. These are host obligations, not supplied by the reconciliation code.
+pub trait ProjectStore {
+    fn inventory(&mut self) -> std::io::Result<Manifest>;
+    fn open_version(
+        &mut self,
+        path: &str,
+        version: FileVersion,
+    ) -> std::io::Result<Box<dyn std::io::Read>>;
+    fn stage(
+        &mut self,
+        path: &str,
+        expected: Option<FileVersion>,
+        incoming: FileVersion,
+    ) -> std::io::Result<Box<dyn StagedFile>>;
+    fn remove_if_version(&mut self, path: &str, expected: FileVersion) -> std::io::Result<()>;
+}
+
+/// A private, bounded staging destination. Commit must atomically compare
+/// the current destination with the expected version supplied at creation,
+/// reject dirty open editors, and atomically replace only on a match. Dropping
+/// an uncommitted stage must discard it. Adapters must enforce these rules.
+pub trait StagedFile: std::io::Write {
+    fn commit(self: Box<Self>) -> std::io::Result<()>;
+}
+
+pub struct SyncResult {
+    /// Only returned when both post-sync inventories match. The caller must
+    /// persist and acknowledge it with the peer before using it as a baseline.
+    pub baseline: Option<Manifest>,
+    /// Conflicting paths are not modified. No baseline is returned while any
+    /// conflict remains, even if independent paths were synchronized.
+    pub conflicts: Vec<String>,
+}
+
+/// Reconcile two complete stores. A failed transfer or conditional write stops
+/// the round; retaining the previous baseline makes a retry safe. This engine
+/// does not provide transport, host adapters or distributed acknowledgement.
+pub fn synchronize(
+    local: &mut dyn ProjectStore,
+    remote: &mut dyn ProjectStore,
+    base: Option<&Manifest>,
+    max_file_bytes: u64,
+) -> std::io::Result<SyncResult> {
+    let local_manifest = local.inventory()?;
+    let remote_manifest = remote.inventory()?;
+    if local_manifest
+        .files
+        .values()
+        .chain(remote_manifest.files.values())
+        .any(|v| v.size > max_file_bytes)
+    {
+        return Err(std::io::Error::other("file exceeds configured limit"));
+    }
+    let decisions =
+        plan(base, &local_manifest, &remote_manifest, true, true).map_err(std::io::Error::other)?;
+    let mut conflicts = Vec::new();
+    for (path, decision) in decisions {
+        let left = local_manifest.files.get(&path).copied();
+        let right = remote_manifest.files.get(&path).copied();
+        match decision {
+            Decision::Unchanged => {}
+            Decision::Conflict => conflicts.push(path),
+            Decision::Send => transfer_file(
+                local,
+                remote,
+                &path,
+                left.expect("send requires local"),
+                right,
+                max_file_bytes,
+            )?,
+            Decision::Receive => transfer_file(
+                remote,
+                local,
+                &path,
+                right.expect("receive requires remote"),
+                left,
+                max_file_bytes,
+            )?,
+            Decision::DeleteLocal => {
+                local.remove_if_version(&path, left.expect("delete requires local"))?
+            }
+            Decision::DeleteRemote => {
+                remote.remove_if_version(&path, right.expect("delete requires remote"))?
+            }
+        }
+    }
+    if !conflicts.is_empty() {
+        return Ok(SyncResult {
+            baseline: None,
+            conflicts,
+        });
+    }
+    let left_after = local.inventory()?;
+    let right_after = remote.inventory()?;
+    if left_after != right_after {
+        return Err(std::io::Error::other(
+            "project changed during synchronization",
+        ));
+    }
+    Ok(SyncResult {
+        baseline: Some(left_after),
+        conflicts,
+    })
+}
+
+fn transfer_file(
+    source: &mut dyn ProjectStore,
+    destination: &mut dyn ProjectStore,
+    path: &str,
+    incoming: FileVersion,
+    expected: Option<FileVersion>,
+    max_file_bytes: u64,
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut reader = source.open_version(path, incoming)?;
+    let mut staged = destination.stage(path, expected, incoming)?;
+    let mut verifier =
+        ChunkVerifier::new(incoming, max_file_bytes).map_err(std::io::Error::other)?;
+    let mut buffer = [0u8; 32 * 1024];
+    let mut offset = 0u64;
+    loop {
+        let n = reader.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        verifier
+            .push(offset, &buffer[..n])
+            .map_err(std::io::Error::other)?;
+        staged.write_all(&buffer[..n])?;
+        offset += n as u64;
+    }
+    verifier.finish().map_err(std::io::Error::other)?;
+    staged.flush()?;
+    staged.commit()
+}

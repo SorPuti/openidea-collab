@@ -440,7 +440,7 @@ impl Realtime {
                 document.crdt.acknowledge(operation);
                 persist_checkpoint(self.session_id, document_id, self.project, &document.crdt)?;
             }
-            Kind::Presence => {}
+            Kind::Presence | Kind::Project => {}
         }
         Ok(())
     }

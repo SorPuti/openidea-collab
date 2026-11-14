@@ -227,6 +227,7 @@ async fn health_and_protocol_do_not_expose_content_or_legacy_file_routes() {
         .unwrap();
     assert_eq!(info["protocol"], 1);
     assert_eq!(info["content_retention"], "transient_forwarding_only");
+    assert_eq!(info["project_frames"], true);
     for path in ["/rooms", "/rooms/old/files/.git/config"] {
         assert_eq!(
             server
@@ -684,4 +685,43 @@ async fn streamed_binary_chunks_survive_real_websocket_relay() {
     staged.read_to_end(&mut staged_bytes).unwrap();
     assert_eq!(staged_bytes, data);
     assert_eq!(offset, data.len() as u64);
+}
+
+#[tokio::test]
+async fn project_channel_forwards_targeted_editor_frames_and_refuses_viewers() {
+    let server = Server::start(None).await;
+    let owner = server.create().await;
+    let editor = server.join(&owner, Role::Editor).await;
+    let viewer = server.join(&owner, Role::Viewer).await;
+    let document = server.document(&owner).await;
+    let mut owner_socket = server.socket(&owner).await;
+    let mut editor_socket = server.socket(&editor).await;
+    let mut viewer_socket = server.socket(&viewer).await;
+    let payload = b"synthetic project packet";
+    let packet = frame(Kind::Project, document, owner.member_id, payload);
+    editor_socket
+        .send(Message::Binary(packet.clone().into()))
+        .await
+        .unwrap();
+    let forwarded = binary(&mut owner_socket).await;
+    assert_eq!(&forwarded[..16], editor.member_id.as_bytes());
+    assert_eq!(&forwarded[16..], packet);
+    let forbidden = frame(Kind::Project, document, owner.member_id, payload);
+    viewer_socket
+        .send(Message::Binary(forbidden.into()))
+        .await
+        .unwrap();
+    closed(&mut viewer_socket).await;
+}
+
+#[test]
+fn old_relay_info_defaults_project_frame_support_to_false() {
+    let info: openidea_collab_protocol::ServiceInfo = serde_json::from_value(json!({
+        "protocol": 1, "max_members_per_session": 3,
+        "websocket_url": "wss://collab.synthosia.com/v1/socket",
+        "max_frame_bytes": 65536, "max_transfer_bytes": 2097152,
+        "content_retention": "transient_forwarding_only"
+    }))
+    .unwrap();
+    assert!(!info.project_frames);
 }
