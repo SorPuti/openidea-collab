@@ -1,0 +1,38 @@
+// Proposal only: OpenIDEA does not implement this interface. The actual API,
+// capabilities and version must be decided by host maintainers.
+package sorputi:project-file-proposal@0.1.0;
+
+interface project-files {
+    // A digest must name a complete byte stream, not a timestamp or inode.
+    record version { size: u64, sha256: list<u8> }
+    record file-entry { path: string, version: version }
+    record page { entries: list<file-entry>, next: option<list<u8>> }
+    variant expected { absent, existing(version) }
+    variant error { denied, unsafe-path, not-found, changed, incomplete, quota, unsupported, failed }
+
+    // Snapshot enumeration must either cover the approved project scope in
+    // full or report failure; a truncated page is never evidence of deletion.
+    // A host-defined immutable scan token and cursor are scoped to this
+    // project/grant and expire when the snapshot is invalidated.
+    begin-scan: func(project: u64) -> result<list<u8>, error>;
+    scan-page: func(scan: list<u8>, cursor: option<list<u8>>, limit: u32) -> result<page, error>;
+    end-scan: func(scan: list<u8>);
+
+    // Open/read use a stable regular-file handle and reject links on every
+    // component; a changed file must not be returned as a coherent version.
+    open-read: func(project: u64, path: string) -> result<tuple<u64, version>, error>;
+    read-chunk: func(handle: u64, offset: u64, limit: u32) -> result<list<u8>, error>;
+    close-read: func(handle: u64);
+
+    // Staging is private and bounded; abort/expiry removes temporary data.
+    // Commit uses host-enforced safe relative resolution and atomic conflict
+    // detection against expected. Dirty open editors are never overwritten.
+    begin-write: func(project: u64, path: string, expected: expected, incoming: version) -> result<u64, error>;
+    write-chunk: func(handle: u64, offset: u64, data: list<u8>) -> result<_, error>;
+    commit-write: func(handle: u64) -> result<version, error>;
+    abort-write: func(handle: u64);
+    // Delete must compare the expected current version and preserve changed
+    // files. Conflict/no-follow safety are host properties, not path checks by
+    // untrusted plugin code.
+    delete: func(project: u64, path: string, expected: version) -> result<_, error>;
+}
