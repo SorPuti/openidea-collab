@@ -781,6 +781,7 @@ version = "0.1.0"
 dependencies = [
  "openidea-collab-protocol",
  "sha2",
+ "tempfile",
  "uuid",
  "yrs",
 ]
