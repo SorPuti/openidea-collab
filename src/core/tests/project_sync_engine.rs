@@ -8,6 +8,7 @@ use std::{
 };
 use tempfile::{NamedTempFile, TempDir};
 
+// Test fixture only: its check-then-persist operations are not a production CAS.
 struct RealTestStore {
     root: PathBuf,
 }
@@ -20,14 +21,35 @@ fn version(path: &Path) -> io::Result<Option<FileVersion>> {
 }
 impl ProjectStore for RealTestStore {
     fn inventory(&mut self) -> io::Result<Manifest> {
-        let mut entries = Vec::new();
-        for entry in fs::read_dir(&self.root)? {
-            let entry = entry?;
-            if entry.file_type()?.is_file() {
-                let path = entry.file_name().to_string_lossy().to_string();
-                entries.push((path, version(&entry.path())?.unwrap()));
+        fn walk(
+            root: &Path,
+            directory: &Path,
+            entries: &mut Vec<(String, FileVersion)>,
+        ) -> io::Result<()> {
+            for entry in fs::read_dir(directory)? {
+                let entry = entry?;
+                let kind = entry.file_type()?;
+                if kind.is_symlink() {
+                    return Err(io::Error::other("symlink in test inventory"));
+                }
+                if kind.is_dir() {
+                    walk(root, &entry.path(), entries)?;
+                }
+                if kind.is_file() {
+                    let path = entry.path();
+                    let rel = path
+                        .strip_prefix(root)
+                        .map_err(io::Error::other)?
+                        .to_str()
+                        .ok_or_else(|| io::Error::other("non-UTF8 path"))?
+                        .to_owned();
+                    entries.push((rel, version(&path)?.unwrap()));
+                }
             }
+            Ok(())
         }
+        let mut entries = Vec::new();
+        walk(&self.root, &self.root, &mut entries)?;
         Manifest::new(entries).map_err(io::Error::other)
     }
     fn open_version(&mut self, path: &str, expected: FileVersion) -> io::Result<Box<dyn Read>> {
@@ -43,8 +65,10 @@ impl ProjectStore for RealTestStore {
         expected: Option<FileVersion>,
         incoming: FileVersion,
     ) -> io::Result<Box<dyn StagedFile>> {
+        let target = self.root.join(path);
+        fs::create_dir_all(target.parent().unwrap())?;
         Ok(Box::new(RealTestStage {
-            target: self.root.join(path),
+            target,
             expected,
             incoming,
             temp: NamedTempFile::new_in(&self.root)?,
@@ -100,10 +124,18 @@ fn synchronizes_real_projects_with_binary_updates_and_deletions() {
         .collect();
     fs::write(a.root.join("image.bin"), &binary).unwrap();
     fs::write(a.root.join("old.txt"), b"one").unwrap();
+    fs::create_dir(a.root.join("src")).unwrap();
+    fs::write(a.root.join("src/unicode-😀.txt"), "Olá 😀").unwrap();
+    fs::write(a.root.join("src/empty.bin"), []).unwrap();
     let initial = synchronize(&mut a, &mut b, None, 4 * 1024 * 1024).unwrap();
     let base = initial.baseline.unwrap();
     assert!(initial.conflicts.is_empty());
     assert_eq!(fs::read(b.root.join("image.bin")).unwrap(), binary);
+    assert_eq!(
+        fs::read_to_string(b.root.join("src/unicode-😀.txt")).unwrap(),
+        "Olá 😀"
+    );
+    assert_eq!(fs::read(b.root.join("src/empty.bin")).unwrap(), b"");
     fs::remove_file(a.root.join("old.txt")).unwrap();
     fs::write(b.root.join("new.txt"), b"new remotely").unwrap();
     let next = synchronize(&mut a, &mut b, Some(&base), 4 * 1024 * 1024).unwrap();
@@ -223,4 +255,20 @@ fn transfers_more_than_the_old_open_document_limit() {
     assert!(result.conflicts.is_empty());
     assert_eq!(result.baseline.unwrap().files().len(), 96);
     assert_eq!(fs::read_dir(&b.root).unwrap().count(), 96);
+}
+
+#[cfg(unix)]
+#[test]
+fn incomplete_inventory_due_to_link_does_not_delete_peer_files() {
+    use std::os::unix::fs::symlink;
+    let (_temp, mut a, mut b) = stores();
+    fs::write(a.root.join("x.txt"), b"base").unwrap();
+    let baseline = synchronize(&mut a, &mut b, None, 1000)
+        .unwrap()
+        .baseline
+        .unwrap();
+    fs::remove_file(a.root.join("x.txt")).unwrap();
+    symlink(b.root.join("x.txt"), a.root.join("x.txt")).unwrap();
+    assert!(synchronize(&mut a, &mut b, Some(&baseline), 1000).is_err());
+    assert_eq!(fs::read(b.root.join("x.txt")).unwrap(), b"base");
 }
