@@ -1,6 +1,6 @@
 id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
-version = "0.4.8"
+version = "0.4.9"
 description = "Realtime collaboration for explicitly shared OpenIDEA documents through collab.synthosia.com."
 authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
@@ -9,7 +9,7 @@ categories = ["tools"]
 icon = "icons/collab.svg"
 engines.openidea = "^1.6"
 wasm = "dist/plugin.wasm"
-activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready", "on-event:document-changed"]
+activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready", "on-event:document-changed", "on-event:file-opened"]
 
 [capabilities]
 required = ["project.read", "editor.read", "events", "storage", "secrets", "net:collab.synthosia.com"]
