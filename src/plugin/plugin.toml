@@ -1,18 +1,18 @@
 id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
-version = "0.4.10"
+version = "0.4.11-dev.1"
 description = "Realtime collaboration for explicitly shared OpenIDEA documents through collab.synthosia.com."
 authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
-change-notes = "Preserves stopped-document exclusions during automatic sharing and clarifies source-transmission scope. Remote document application remains disabled."
+change-notes = "Development build: enables versioned inbound edits for explicitly shared open documents on OpenIDEA 0.1.45 or newer."
 categories = ["tools"]
 icon = "icons/collab.svg"
-engines.openidea = "^1.6"
+engines.openidea = "^1.8"
 wasm = "dist/plugin.wasm"
 activation = ["on-command:*", "on-view:collab-panel", "on-event:websocket-ready", "on-event:document-changed", "on-event:file-opened"]
 
 [capabilities]
-required = ["project.read", "editor.read", "events", "storage", "secrets", "net:collab.synthosia.com"]
+required = ["project.read", "editor.read", "editor.write", "events", "storage", "secrets", "net:collab.synthosia.com"]
 
 [contributes.settings]
 title = "OpenIDEA Collab"
