@@ -48,16 +48,26 @@ impl Page {
     }
 }
 
-pub fn html(
-    page: Page,
-    session: Option<&Session>,
-    relay: &str,
-    realtime_status: Option<&str>,
-    error: Option<&str>,
-    invitation: Option<&str>,
-    activity: &[String],
-    observed_peers: usize,
-) -> String {
+pub struct PanelState<'a> {
+    pub session: Option<&'a Session>,
+    pub relay: &'a str,
+    pub realtime_status: Option<&'a str>,
+    pub error: Option<&'a str>,
+    pub invitation: Option<&'a str>,
+    pub activity: &'a [String],
+    pub observed_peers: usize,
+}
+
+pub fn html(page: Page, state: PanelState<'_>) -> String {
+    let PanelState {
+        session,
+        relay,
+        realtime_status,
+        error,
+        invitation,
+        activity,
+        observed_peers,
+    } = state;
     let nav = [
         Page::Start,
         Page::Session,
@@ -67,9 +77,11 @@ pub fn html(
     ]
     .into_iter()
     .map(|candidate| {
-        let selected = (candidate == page)
-            .then_some(" aria-current=\"page\"")
-            .unwrap_or("");
+        let selected = if candidate == page {
+            " aria-current=\"page\""
+        } else {
+            ""
+        };
         format!(
             "<button class=\"tab{}\" type=\"button\" onclick=\"go('{}')\"{}>{}</button>",
             if candidate == page { " active" } else { "" },
@@ -158,11 +170,11 @@ fn session_page(
     } else {
         "<button class=\"action primary\" onclick=\"action('connect-realtime')\">Conectar e revisar abertos</button>"
     };
-    let invite_action = (session.role == openidea_collab_protocol::Role::Owner)
-        .then_some(
-            "<button class=\"action\" onclick=\"action('create-invite')\">Criar convite</button>",
-        )
-        .unwrap_or("");
+    let invite_action = if session.role == openidea_collab_protocol::Role::Owner {
+        "<button class=\"action\" onclick=\"action('create-invite')\">Criar convite</button>"
+    } else {
+        ""
+    };
     let participants = if observed_peers == 0 {
         "Somente você por enquanto".to_owned()
     } else {
@@ -239,13 +251,15 @@ mod tests {
         assert_eq!(Page::parse("<script>"), None);
         let page = html(
             Page::Start,
-            None,
-            "https://relay.example",
-            None,
-            None,
-            None,
-            &[],
-            0,
+            PanelState {
+                session: None,
+                relay: "https://relay.example",
+                realtime_status: None,
+                error: None,
+                invitation: None,
+                activity: &[],
+                observed_peers: 0,
+            },
         );
         assert!(page.contains("openidea.postMessage"));
         assert!(page.contains("Criar sessão"));
@@ -271,13 +285,15 @@ mod tests {
         };
         let page = html(
             Page::Documents,
-            Some(&session),
-            "https://relay.example",
-            None,
-            Some("<unsafe>"),
-            None,
-            &[],
-            0,
+            PanelState {
+                session: Some(&session),
+                relay: "https://relay.example",
+                realtime_status: None,
+                error: Some("<unsafe>"),
+                invitation: None,
+                activity: &[],
+                observed_peers: 0,
+            },
         );
         assert!(page.contains("&lt;script&gt;alert(1)&lt;/script&gt;.rs"));
         assert!(page.contains("&lt;unsafe&gt;"));
