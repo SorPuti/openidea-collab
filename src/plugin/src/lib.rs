@@ -59,15 +59,15 @@ impl Plugin for CollabPlugin {
                 }
                 let relay = client::relay_origin()?;
                 let credential = if id == "create-session" {
-                    if !host::secret_is_set(client::ADMISSION_SECRET) {
-                        if let Some(token) = host::input(
+                    if !host::secret_is_set(client::ADMISSION_SECRET)
+                        && let Some(token) = host::input(
                             "Relay admission token (leave blank if the relay permits open creation)",
                             None,
-                        )? {
-                            let token = token.trim();
-                            if !token.is_empty() {
-                                host::secret_set(client::ADMISSION_SECRET, token)?;
-                            }
+                        )?
+                    {
+                        let token = token.trim();
+                        if !token.is_empty() {
+                            host::secret_set(client::ADMISSION_SECRET, token)?;
                         }
                     }
                     client::create(&relay)?
@@ -130,11 +130,9 @@ impl Plugin for CollabPlugin {
         let opened_document = events
             .iter()
             .any(|event| matches!(event, Event::FileOpened(_)));
-        if opened_document {
-            if let Err(error) = self.share_open_documents_automatically(ctx) {
-                self.panel_error = Some(error.to_string());
-                self.record("Um documento aberto não pôde ser incluído automaticamente");
-            }
+        if opened_document && let Err(error) = self.share_open_documents_automatically(ctx) {
+            self.panel_error = Some(error.to_string());
+            self.record("Um documento aberto não pôde ser incluído automaticamente");
         }
         let project = self.project(ctx);
         let result = project.and_then(|project| {
@@ -347,9 +345,11 @@ impl CollabPlugin {
             } else {
                 " Incoming collaborator edits are disabled."
             };
-            let future = enable_auto_scope.then_some(
-                "\n\nApprove automatic sharing for future eligible documents you open in this project? Closed files are never scanned.",
-            ).unwrap_or("");
+            let future = if enable_auto_scope {
+                "\n\nApprove automatic sharing for future eligible documents you open in this project? Closed files are never scanned."
+            } else {
+                ""
+            };
             if !host::confirm(
                 title,
                 &format!(
@@ -473,16 +473,19 @@ impl Views for CollabPlugin {
         let relay = client::relay_origin().unwrap_or_else(|_| DEFAULT_ORIGIN.into());
         let mut page = View::new(Body::Html(panel::html(
             self.page,
-            session.as_ref().ok().and_then(Option::as_ref),
-            &relay,
-            self.realtime.as_ref().map(|_| status.as_str()),
-            self.panel_error.as_deref(),
-            self.invitation.as_deref(),
-            &self.activity,
-            self.realtime
-                .as_ref()
-                .map(realtime::Realtime::observed_peers)
-                .unwrap_or_default(),
+            panel::PanelState {
+                session: session.as_ref().ok().and_then(Option::as_ref),
+                relay: &relay,
+                realtime_status: self.realtime.as_ref().map(|_| status.as_str()),
+                error: self.panel_error.as_deref(),
+                invitation: self.invitation.as_deref(),
+                activity: &self.activity,
+                observed_peers: self
+                    .realtime
+                    .as_ref()
+                    .map(realtime::Realtime::observed_peers)
+                    .unwrap_or_default(),
+            },
         )));
         if session.is_err() {
             page = page.status("Abra o projeto desta sessão ou use Sair da sessão no painel.");
