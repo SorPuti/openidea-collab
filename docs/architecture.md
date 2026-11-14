@@ -24,7 +24,7 @@ The development plugin requires OpenIDEA v0.1.45 or newer. It has no file-save s
 
 The local project identity is hashed for storage and never sent to the relay. All session and connection operations require that project; a project switch requires leaving explicitly. The plugin's lexical policy limits what can be proposed, while the host's repeated shared-document resolver enforces the filesystem boundary.
 
-Versioned local document events and nonfocused open documents are implemented. Remote application remains intentionally disabled; see [host-api.md](host-api.md).
+Versioned local document events and nonfocused open documents are implemented. Remote application is enabled experimentally for shared open documents; see [host-api.md](host-api.md).
 
 ## Durability
 

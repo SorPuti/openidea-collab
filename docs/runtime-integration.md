@@ -12,14 +12,14 @@ The upstream change supplies:
 - coalesced `websocket-ready` events instead of polling;
 - exact project-relative `document-changed` subscriptions;
 - versioned reads and atomic UTF-16 editor edits for explicit open documents;
-- project-relative subscriptions and versioned editor APIs; no-follow remote application is not yet supplied by the released host;
+- project-relative subscriptions and versioned editor APIs; OpenIDEA 0.1.45 checks background edit paths, though races and saving still need testing;
 - an SDK mock that records frames, accepts inbound messages, models close/drain and enforces project/network grants.
 
 This layer contains no Synthosia URL, room model, CRDT, member role or OpenIDEA Collab protocol.
 
 ## Collab layer
 
-The plugin stores one session against a project identity and opens WSS only after an explicit prepare/join/connect action. Sharing requires a second confirmation for the focused document and states that unsaved editor content is transmitted. Each participant selects the same project-relative document; its relay ID is UUIDv5(session, path). The owner registers that opaque ID with the relay.
+The plugin stores one session against a project identity and opens WSS only after an explicit prepare/join/connect action. Sharing requires confirmation and states that unsaved editor content is transmitted. A project scope can automatically share eligible open documents; each participant must have the same project-relative document open; its relay ID is UUIDv5(session, path). The owner registers that opaque ID with the relay.
 
 The runtime then follows this flow:
 
@@ -30,12 +30,13 @@ versioned document event
   -> authenticated relay forwarding
   -> bounded host receive queue + websocket-ready
   -> chunk validation/reassembly
-  -> explicit refusal (no local editor write and no peer ACK)
+  -> staged CRDT update + versioned editor edit + checkpoint
+  -> peer ACK only after successful application
 ```
 
 Local events carry sorted non-overlapping offsets in the original document's UTF-16 coordinates. The core applies a batch in descending order as one CRDT transaction. If event versions skip, the runtime reconciles from the current versioned editor snapshot instead of applying offsets to the wrong base.
 
-Incoming updates are refused before CRDT or editor mutation. This preserves the selected local document and makes the sender retain its pending operation instead of treating a relay receipt as delivery. Remote document application stays disabled until the host has tested no-follow protection for final and ancestor links, including control directories.
+The development build applies incoming updates after checking local content and the editor version, then checkpoints before acknowledging. Conflicts and denied writes are refused without ACK. Actual-host path races, saving and real multi-IDE behavior remain unverified. The signed 0.4.10 package still refuses incoming updates.
 
 The relay stores no replay backlog. On reconnect, persisted pending operations are resent and state vectors request missing state from an online authorized peer. Disconnect clears the event path filter; leaving revokes membership and then removes the local credential/session.
 
