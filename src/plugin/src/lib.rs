@@ -30,11 +30,13 @@ impl Plugin for CollabPlugin {
         // Remove the unsafe legacy auto-restored room. No network or file access.
         host::storage::delete("room_state")?;
         host::subscribe(EventKind::WebsocketReady)?;
+        host::subscribe(EventKind::FileOpened)?;
         Ok(())
     }
     fn deactivate(&mut self) {
         self.realtime = None;
         host::unsubscribe(EventKind::DocumentChanged);
+        host::unsubscribe(EventKind::FileOpened);
     }
     fn run_command(
         &mut self,
@@ -50,7 +52,7 @@ impl Plugin for CollabPlugin {
                 if !host::confirm(
                     "Prepare collaboration session",
                     &format!(
-                        "Relay: {DEFAULT_ORIGIN}\nOnly documents you explicitly share will be transmitted. The relay can inspect transient encrypted-transport payloads."
+                        "Relay: {DEFAULT_ORIGIN}\nAfter one separate scope confirmation, eligible documents you open in this project are shared automatically. The plugin never scans closed files or sends excluded paths. The relay can inspect transient encrypted-transport payloads."
                     ),
                 )? {
                     return Ok(None);
@@ -125,6 +127,15 @@ impl Plugin for CollabPlugin {
 
     fn handle_events(&mut self, events: &[Event], ctx: &Invocation) {
         let Some(_) = self.realtime else { return };
+        let opened_document = events
+            .iter()
+            .any(|event| matches!(event, Event::FileOpened(_)));
+        if opened_document {
+            if let Err(error) = self.share_open_documents_automatically(ctx) {
+                self.panel_error = Some(error.to_string());
+                self.record("Um documento aberto não pôde ser incluído automaticamente");
+            }
+        }
         let project = self.project(ctx);
         let result = project.and_then(|project| {
             let connected = self
@@ -233,7 +244,7 @@ impl CollabPlugin {
         let editor = ctx
             .editor()
             .ok_or_else(|| Error::Invalid("Focus the document you want to share".into()))?;
-        self.share_paths(ctx, vec![editor.path()], "Share document", false)
+        self.share_paths(ctx, vec![editor.path()], "Share document", false, false)
     }
 
     /// Shares only eligible documents already opened by the user. This never
@@ -243,7 +254,7 @@ impl CollabPlugin {
             .into_iter()
             .map(|editor| editor.path)
             .collect();
-        self.share_paths(ctx, paths, "Share open documents", false)
+        self.share_paths(ctx, paths, "Share open documents", false, true)
     }
 
     fn share_open_documents_if_available(&mut self, ctx: &Invocation) -> Result<(), Error> {
@@ -251,7 +262,20 @@ impl CollabPlugin {
             .into_iter()
             .map(|editor| editor.path)
             .collect();
-        self.share_paths(ctx, paths, "Share open documents", true)
+        self.share_paths(ctx, paths, "Share open documents", true, true)
+    }
+
+    fn share_open_documents_automatically(&mut self, ctx: &Invocation) -> Result<(), Error> {
+        let session = state::for_project(ctx)?
+            .ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
+        if !session.auto_share_open_documents {
+            return Ok(());
+        }
+        let paths = host::open_editors()?
+            .into_iter()
+            .map(|editor| editor.path)
+            .collect();
+        self.share_paths(ctx, paths, "Share open documents", true, true)
     }
 
     fn share_paths(
@@ -260,6 +284,7 @@ impl CollabPlugin {
         paths: Vec<String>,
         title: &str,
         allow_empty: bool,
+        enable_auto_scope: bool,
     ) -> Result<(), Error> {
         self.connect(ctx)?;
         let project = ctx
@@ -297,19 +322,26 @@ impl CollabPlugin {
                 "Sharing these documents exceeds the session limit of {limit}; stop sharing some documents first"
             )));
         }
-        if !host::confirm(
-            title,
-            &format!(
-                "Share these {} document(s) with up to two authenticated collaborators? Their unsaved editor text and later edits will be transmitted through {DEFAULT_ORIGIN}.\n\n{}",
-                pending.len(),
-                pending
-                    .iter()
-                    .map(|document| document.path.as_str())
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            ),
-        )? {
-            return Ok(());
+        let automatic = enable_auto_scope && session.auto_share_open_documents;
+        if !automatic {
+            let future = enable_auto_scope.then_some(
+                "\n\nApprove automatic sharing for future eligible documents you open in this project? Closed files are never scanned.",
+            ).unwrap_or("");
+            if !host::confirm(
+                title,
+                &format!(
+                    "Share these {} document(s) with up to two authenticated collaborators? Their unsaved editor text and later edits will be transmitted through {DEFAULT_ORIGIN}.{}\n\n{}",
+                    pending.len(),
+                    future,
+                    pending
+                        .iter()
+                        .map(|document| document.path.as_str())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ),
+            )? {
+                return Ok(());
+            }
         }
         let mut added = Vec::new();
         for shared in pending {
@@ -331,6 +363,9 @@ impl CollabPlugin {
             added.push(shared);
         }
         session.documents.extend(added.iter().cloned());
+        if enable_auto_scope {
+            session.auto_share_open_documents = true;
+        }
         if let Err(error) = state::store(&session) {
             for shared in added.iter().rev() {
                 let _ = self

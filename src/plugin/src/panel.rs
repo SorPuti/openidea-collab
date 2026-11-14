@@ -104,8 +104,8 @@ pub fn html(
 body {{ margin:0; background:transparent; font:13px/1.45 system-ui,sans-serif; color:light-dark(#17202a,#e8edf5); }}
 .collab {{ --surface:light-dark(#ffffff,#20252b); --soft:light-dark(#edf5f6,#192f33); --line:light-dark(#d9e3e7,#354149); --muted:light-dark(#667580,#a8b5c0); --accent:light-dark(#087d8e,#3bc7c9); --danger:light-dark(#b42342,#ff94a3); padding:16px; }}
 .top {{ display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:15px; }}
-.brand {{ display:flex; align-items:center; gap:9px; font-weight:600; letter-spacing:-.01em; }}
-.mark {{ width:27px; height:27px; display:grid; place-items:center; border-radius:9px; color:#fff; background:linear-gradient(135deg,var(--accent),#4275ce); }}
+.brand {{ display:flex; align-items:center; gap:9px; font-weight:650; letter-spacing:-.01em; }}
+.mark {{ width:27px; height:27px; position:relative; flex:none; }} .mark::before,.mark::after {{ content:""; position:absolute; width:13px; height:13px; border:3px solid; border-radius:50%; top:4px; }} .mark::before {{ border-color:#27d7bd; left:1px; }} .mark::after {{ border-color:#7986ff; right:1px; }} .mark i {{ position:absolute; width:8px; height:3px; background:light-dark(#fff,#e8edf5); left:10px; top:12px; transform:rotate(-35deg); border-radius:2px; }}
 .state {{ display:flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; }}
 .dot {{ width:7px; height:7px; border-radius:50%; background:var(--accent); animation:pulse 1.8s ease-in-out infinite; }}
 @keyframes pulse {{ 50% {{ box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 0%,transparent); }} 0%,100% {{ box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent); }} }}
@@ -124,7 +124,7 @@ h1 {{ margin:6px 0 8px; font-size:23px; line-height:1.16; letter-spacing:-.035em
 .actions {{ display:flex; flex-wrap:wrap; gap:8px; margin-top:15px; }} .action {{ border:1px solid var(--line); border-radius:8px; background:var(--soft); color:inherit; padding:7px 10px; font:inherit; font-weight:600; cursor:pointer; }} .action.primary {{ background:var(--accent); border-color:var(--accent); color:white; }} .action.danger {{ color:var(--danger); }} .action:hover {{ filter:brightness(1.08); }}
 @media (max-width:360px) {{ .grid {{ grid-template-columns:1fr; }} h1 {{ font-size:21px; }} }}
 </style>
-<header class="top"><div class="brand"><span class="mark">C</span>OpenIDEA Collab</div><div class="state"><span class="dot"></span>{state}</div></header>
+<header class="top"><div class="brand"><span class="mark" aria-hidden="true"><i></i></span>OpenIDEA Collab</div><div class="state"><span class="dot" aria-hidden="true"></span>{state}</div></header>
 <nav class="tabs" aria-label="Colaboração">{nav}</nav>{notice}{content}
 <script>function go(page){{openidea.postMessage(JSON.stringify({{op:'page',page:page}}));}}function action(id){{openidea.postMessage(JSON.stringify({{op:'action',id:id}}));}}</script>
 </main>"#,
@@ -134,7 +134,7 @@ h1 {{ margin:6px 0 8px; font-size:23px; line-height:1.16; letter-spacing:-.035em
 
 fn start(session: Option<&Session>, relay: &str) -> String {
     if session.is_some() {
-        return "<section class=\"hero\"><div class=\"eyebrow\">Sessão preparada</div><h1>Você já pode iniciar a colaboração.</h1><p>Conecte o realtime: os documentos atualmente abertos são apresentados juntos para confirmação, sem selecionar arquivo por arquivo.</p><div class=\"actions\"><button class=\"action primary\" onclick=\"action('connect-realtime')\">Conectar e revisar abertos</button></div></section>".into();
+        return "<section class=\"hero\"><div class=\"eyebrow\">Sessão preparada</div><h1>Você já pode iniciar a colaboração.</h1><p>Conecte o realtime: confirme o escopo uma vez e os próximos documentos elegíveis que você abrir entram automaticamente.</p><div class=\"actions\"><button class=\"action primary\" onclick=\"action('connect-realtime')\">Conectar e compartilhar abertos</button></div></section>".into();
     }
     format!(
         "<section class=\"hero\"><div class=\"eyebrow\">Colaboração explícita</div><h1>Edite junto, com controle real.</h1><p>Prepare uma sessão ou aceite um convite. O plugin só apresenta os documentos já abertos para uma confirmação única; ele nunca varre o projeto.</p><div class=\"actions\"><button class=\"action primary\" onclick=\"action('create-session')\">Criar sessão</button><button class=\"action\" onclick=\"action('join-session')\">Aceitar convite</button></div></section><section class=\"card steps\"><div class=\"row\"><span class=\"num\">1</span><div class=\"row-main\"><div class=\"row-title\">Prepare ou entre</div><div class=\"detail\">Cada participante recebe sua própria credencial.</div></div></div><div class=\"row\"><span class=\"num\">2</span><div class=\"row-main\"><div class=\"row-title\">Conecte o realtime</div><div class=\"detail\">A conexão usa TLS com {}</div></div></div><div class=\"row\"><span class=\"num\">3</span><div class=\"row-main\"><div class=\"row-title\">Confirme os documentos abertos</div><div class=\"detail\">Uma única confirmação adiciona os documentos elegíveis de uma vez.</div></div></div></section>",
@@ -190,9 +190,16 @@ fn documents(session: Option<&Session>, connected: bool) -> String {
         session.documents.iter().map(|document| format!("<div class=\"row\"><span class=\"avatar\">↔</span><div class=\"row-main\"><div class=\"row-title\">{}</div><div class=\"detail\">Compartilhado explicitamente · sincronização protegida</div></div><span class=\"pill\">Ativo</span></div>", escape(&document.path))).collect()
     };
     let action = if connected {
-        "<div class=\"actions\"><button class=\"action primary\" onclick=\"action('share-open-documents')\">Compartilhar documentos abertos</button><button class=\"action\" onclick=\"action('stop-sharing-current-document')\">Parar documento atual</button></div>"
+        let label = if session.auto_share_open_documents {
+            "Adicionar documentos abertos agora"
+        } else {
+            "Confirmar escopo automático"
+        };
+        format!(
+            "<div class=\"actions\"><button class=\"action primary\" onclick=\"action('share-open-documents')\">{label}</button><button class=\"action\" onclick=\"action('stop-sharing-current-document')\">Parar documento atual</button></div>"
+        )
     } else {
-        "<div class=\"actions\"><button class=\"action primary\" onclick=\"action('connect-realtime')\">Conectar para compartilhar</button></div>"
+        "<div class=\"actions\"><button class=\"action primary\" onclick=\"action('connect-realtime')\">Conectar e compartilhar abertos</button></div>".to_owned()
     };
     format!("<section class=\"card list\">{rows}{action}</section>")
 }
@@ -248,13 +255,14 @@ mod tests {
     #[test]
     fn untrusted_paths_and_errors_are_html_escaped() {
         let session = Session {
-            schema: 2,
+            schema: 3,
             project: [0; 32],
             relay: "https://relay.example".into(),
             session_id: uuid::Uuid::nil(),
             member_id: uuid::Uuid::nil(),
             role: openidea_collab_protocol::Role::Owner,
             expires_at: 0,
+            auto_share_open_documents: false,
             documents: vec![crate::state::SharedDocument {
                 path: "<script>alert(1)</script>.rs".into(),
                 document_id: uuid::Uuid::nil(),

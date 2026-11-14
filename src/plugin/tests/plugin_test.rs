@@ -47,7 +47,11 @@ fn installation_and_file_events_do_not_upload_or_write_anything() {
     assert!(mock.requests().is_empty());
     assert_eq!(
         mock.subscriptions(),
-        [openidea_plugin::EventKind::WebsocketReady].into()
+        [
+            openidea_plugin::EventKind::WebsocketReady,
+            openidea_plugin::EventKind::FileOpened,
+        ]
+        .into()
     );
     assert!(mock.path_subscriptions().is_empty());
     assert!(host::storage::get("room_state").unwrap().is_none());
@@ -252,6 +256,7 @@ fn remote_edit_case(local_conflict: bool, write_denied: bool) {
     );
     let session = state::load().unwrap().unwrap();
     let document_id = session.documents[0].document_id;
+    assert!(session.auto_share_open_documents);
     let snapshot = socket
         .sent
         .iter()
@@ -389,6 +394,56 @@ fn remote_edit_case(local_conflict: bool, write_denied: bool) {
 #[test]
 fn document_change_flows_to_websocket_and_remote_edit_is_refused_without_ack() {
     remote_edit_case(false, false);
+}
+
+#[test]
+fn opening_a_later_document_uses_the_one_time_auto_share_scope() {
+    let mock = mock();
+    mock.open_editor("/project/src/main.rs", "rust", "fn main() {}", &[]);
+    mock.on_fetch(|request| {
+        assert!(request.url.ends_with("/documents"));
+        Ok(HttpResponse {
+            status: 204,
+            headers: vec![],
+            body: vec![],
+        })
+    });
+    let credential = serde_json::from_value(json!({
+        "session_id":"11111111-1111-4111-8111-111111111111",
+        "member_id":"22222222-2222-4222-8222-222222222222",
+        "credential":"A".repeat(43), "role":"owner", "expires_at":9999999999u64,
+        "websocket_url":"wss://collab.synthosia.com/v1/socket"
+    }))
+    .unwrap();
+    state::save(
+        &mock.invocation(),
+        "https://collab.synthosia.com".into(),
+        credential,
+    )
+    .unwrap();
+    let mut plugin = CollabPlugin::default();
+    plugin
+        .activate(&mock.context("sorputi.openidea-collab"))
+        .unwrap();
+    mock.answer_next_prompt(Some(&["yes"]));
+    plugin
+        .run_command("connect-realtime", &mock.invocation(), None)
+        .unwrap();
+
+    mock.open_editor("/project/src/next.rs", "rust", "fn next() {}", &[]);
+    plugin.handle_events(
+        &[Event::FileOpened("src/next.rs".into())],
+        &mock.invocation(),
+    );
+
+    let session = state::load().unwrap().unwrap();
+    assert!(session.auto_share_open_documents);
+    assert!(
+        session
+            .documents
+            .iter()
+            .any(|document| document.path == "src/next.rs")
+    );
 }
 
 #[cfg(feature = "experimental-remote-edits")]

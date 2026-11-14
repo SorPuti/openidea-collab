@@ -22,6 +22,10 @@ pub struct Session {
     pub member_id: Uuid,
     pub role: Role,
     pub expires_at: u64,
+    /// Opt-in scope for future eligible documents the user opens in this
+    /// project. It never permits a project-wide filesystem scan.
+    #[serde(default)]
+    pub auto_share_open_documents: bool,
     #[serde(default)]
     pub documents: Vec<SharedDocument>,
 }
@@ -36,7 +40,7 @@ pub fn load() -> Result<Option<Session>, Error> {
     };
     let session: Session = serde_json::from_str(&value)
         .map_err(|_| Error::Invalid("Invalid stored session; leave it before continuing".into()))?;
-    if !matches!(session.schema, 1 | 2)
+    if !matches!(session.schema, 1..=3)
         || openidea_collab_protocol::Endpoint::parse(&session.relay).is_err()
         || session.session_id.is_nil()
         || session.member_id.is_nil()
@@ -44,7 +48,7 @@ pub fn load() -> Result<Option<Session>, Error> {
         return Err(Error::Invalid("Stored session is incompatible".into()));
     }
     Ok(Some(Session {
-        schema: 2,
+        schema: 3,
         ..session
     }))
 }
@@ -57,13 +61,14 @@ pub fn for_project(ctx: &Invocation) -> Result<Option<Session>, Error> {
 }
 pub fn save(ctx: &Invocation, relay: String, credential: SessionCredential) -> Result<(), Error> {
     let session = Session {
-        schema: 2,
+        schema: 3,
         project: project_identity(&root(ctx)?),
         relay,
         session_id: credential.session_id,
         member_id: credential.member_id,
         role: credential.role,
         expires_at: credential.expires_at,
+        auto_share_open_documents: false,
         documents: Vec::new(),
     };
     let json = serde_json::to_string(&session)
