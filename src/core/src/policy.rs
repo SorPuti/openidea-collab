@@ -27,6 +27,12 @@ pub fn safe_relative_path(path: &str) -> bool {
             && !matches!(
                 lower.as_str(),
                 ".git"
+                    | ".npmrc"
+                    | ".pypirc"
+                    | ".netrc"
+                    | ".ssh"
+                    | ".aws"
+                    | ".docker"
                     | ".hg"
                     | ".svn"
                     | ".openidea"
@@ -155,6 +161,12 @@ mod tests {
             "src/CON.txt",
             "src/x.",
             "node_modules/pkg/a",
+            ".npmrc",
+            "config/.pypirc",
+            ".netrc",
+            ".ssh/config",
+            ".aws/config",
+            ".docker/config.json",
         ] {
             assert!(!safe_relative_path(path), "{path}");
         }
