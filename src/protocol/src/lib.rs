@@ -156,6 +156,7 @@ pub enum Kind {
     Ack = 3,
     Presence = 4,
     Snapshot = 5,
+    Project = 6,
 }
 impl Kind {
     fn decode(value: u8) -> Result<Self, &'static str> {
@@ -165,11 +166,12 @@ impl Kind {
             3 => Ok(Self::Ack),
             4 => Ok(Self::Presence),
             5 => Ok(Self::Snapshot),
+            6 => Ok(Self::Project),
             _ => Err("unknown frame kind"),
         }
     }
     pub fn writes(self) -> bool {
-        matches!(self, Self::Update | Self::Snapshot)
+        matches!(self, Self::Update | Self::Snapshot | Self::Project)
     }
 }
 
@@ -227,6 +229,9 @@ impl<'a> Frame<'a> {
         }
         if self.kind == Kind::Presence && self.payload.len() > MAX_PRESENCE {
             return Err("presence too large");
+        }
+        if self.kind == Kind::Project && (self.target.is_nil() || self.parts != 1) {
+            return Err("project messages must be targeted and unchunked");
         }
         if self.kind == Kind::Ack && (self.target.is_nil() || self.payload.len() != 16) {
             return Err("ACK requires a target and update UUID");
@@ -309,5 +314,32 @@ mod tests {
         wrong[55..57].copy_from_slice(&0u16.to_be_bytes());
         assert!(Frame::decode(&wrong).is_err());
         assert!(Frame::decode(&vec![0; MAX_FRAME + 1]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod project_transport_tests {
+    use super::*;
+    #[test]
+    fn project_frames_are_targeted_bounded_and_editor_only() {
+        let mut frame = Frame {
+            kind: Kind::Project,
+            document: Uuid::new_v4(),
+            target: Uuid::nil(),
+            message: Uuid::new_v4(),
+            part: 0,
+            parts: 1,
+            total: 1,
+            payload: b"x",
+        };
+        assert!(frame.encode().is_err());
+        frame.target = Uuid::new_v4();
+        assert!(frame.kind.writes());
+        assert_eq!(
+            Frame::decode(&frame.encode().unwrap()).unwrap().kind,
+            Kind::Project
+        );
+        frame.parts = 2;
+        assert!(frame.encode().is_err());
     }
 }

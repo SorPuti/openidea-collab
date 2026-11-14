@@ -685,3 +685,30 @@ async fn streamed_binary_chunks_survive_real_websocket_relay() {
     assert_eq!(staged_bytes, data);
     assert_eq!(offset, data.len() as u64);
 }
+
+#[tokio::test]
+async fn project_channel_forwards_targeted_editor_frames_and_refuses_viewers() {
+    let server = Server::start(None).await;
+    let owner = server.create().await;
+    let editor = server.join(&owner, Role::Editor).await;
+    let viewer = server.join(&owner, Role::Viewer).await;
+    let document = server.document(&owner).await;
+    let mut owner_socket = server.socket(&owner).await;
+    let mut editor_socket = server.socket(&editor).await;
+    let mut viewer_socket = server.socket(&viewer).await;
+    let payload = b"synthetic project packet";
+    let packet = frame(Kind::Project, document, owner.member_id, payload);
+    editor_socket
+        .send(Message::Binary(packet.clone().into()))
+        .await
+        .unwrap();
+    let forwarded = binary(&mut owner_socket).await;
+    assert_eq!(&forwarded[..16], editor.member_id.as_bytes());
+    assert_eq!(&forwarded[16..], packet);
+    let forbidden = frame(Kind::Project, document, owner.member_id, payload);
+    viewer_socket
+        .send(Message::Binary(forbidden.into()))
+        .await
+        .unwrap();
+    closed(&mut viewer_socket).await;
+}

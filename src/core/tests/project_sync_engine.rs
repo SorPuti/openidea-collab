@@ -212,3 +212,15 @@ fn destination_changed_during_transfer_is_not_overwritten() {
         b"local edit during transfer"
     );
 }
+
+#[test]
+fn transfers_more_than_the_old_open_document_limit() {
+    let (_temp, mut a, mut b) = stores();
+    for i in 0..96 {
+        fs::write(a.root.join(format!("file-{i:03}.bin")), [i as u8, 0, 255]).unwrap();
+    }
+    let result = synchronize(&mut a, &mut b, None, 1000).unwrap();
+    assert!(result.conflicts.is_empty());
+    assert_eq!(result.baseline.unwrap().files().len(), 96);
+    assert_eq!(fs::read_dir(&b.root).unwrap().count(), 96);
+}
