@@ -526,10 +526,19 @@ pub fn shared_document(
     path: &str,
     session: Uuid,
 ) -> Result<SharedDocument, Error> {
+    let shared = shared_document_identity(project, path, session)?;
+    project.document(path)?;
+    Ok(shared)
+}
+
+pub fn shared_document_identity(
+    project: &Project,
+    path: &str,
+    session: Uuid,
+) -> Result<SharedDocument, Error> {
     let root = project.root()?;
     let relative = relative_path(&root, path)?;
     validate_relative(&relative)?;
-    project.document(path)?;
     Ok(SharedDocument {
         document_id: Uuid::new_v5(&session, relative.as_bytes()),
         path: relative,

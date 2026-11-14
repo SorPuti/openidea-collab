@@ -263,6 +263,7 @@ mod tests {
             role: openidea_collab_protocol::Role::Owner,
             expires_at: 0,
             auto_share_open_documents: false,
+            excluded_documents: vec![],
             documents: vec![crate::state::SharedDocument {
                 path: "<script>alert(1)</script>.rs".into(),
                 document_id: uuid::Uuid::nil(),
