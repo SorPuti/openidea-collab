@@ -59,15 +59,15 @@ impl Plugin for CollabPlugin {
                 }
                 let relay = client::relay_origin()?;
                 let credential = if id == "create-session" {
-                    if !host::secret_is_set(client::ADMISSION_SECRET) {
-                        if let Some(token) = host::input(
+                    if !host::secret_is_set(client::ADMISSION_SECRET)
+                        && let Some(token) = host::input(
                             "Relay admission token (leave blank if the relay permits open creation)",
                             None,
-                        )? {
-                            let token = token.trim();
-                            if !token.is_empty() {
-                                host::secret_set(client::ADMISSION_SECRET, token)?;
-                            }
+                        )?
+                    {
+                        let token = token.trim();
+                        if !token.is_empty() {
+                            host::secret_set(client::ADMISSION_SECRET, token)?;
                         }
                     }
                     client::create(&relay)?
@@ -130,11 +130,9 @@ impl Plugin for CollabPlugin {
         let opened_document = events
             .iter()
             .any(|event| matches!(event, Event::FileOpened(_)));
-        if opened_document {
-            if let Err(error) = self.share_open_documents_automatically(ctx) {
-                self.panel_error = Some(error.to_string());
-                self.record("Um documento aberto não pôde ser incluído automaticamente");
-            }
+        if opened_document && let Err(error) = self.share_open_documents_automatically(ctx) {
+            self.panel_error = Some(error.to_string());
+            self.record("Um documento aberto não pôde ser incluído automaticamente");
         }
         let project = self.project(ctx);
         let result = project.and_then(|project| {
@@ -244,7 +242,14 @@ impl CollabPlugin {
         let editor = ctx
             .editor()
             .ok_or_else(|| Error::Invalid("Focus the document you want to share".into()))?;
-        self.share_paths(ctx, vec![editor.path()], "Share document", false, false)
+        self.share_paths(
+            ctx,
+            vec![editor.path()],
+            "Share document",
+            false,
+            false,
+            false,
+        )
     }
 
     /// Shares only eligible documents already opened by the user. This never
@@ -254,7 +259,7 @@ impl CollabPlugin {
             .into_iter()
             .map(|editor| editor.path)
             .collect();
-        self.share_paths(ctx, paths, "Share open documents", false, true)
+        self.share_paths(ctx, paths, "Share open documents", false, true, false)
     }
 
     fn share_open_documents_if_available(&mut self, ctx: &Invocation) -> Result<(), Error> {
@@ -262,7 +267,7 @@ impl CollabPlugin {
             .into_iter()
             .map(|editor| editor.path)
             .collect();
-        self.share_paths(ctx, paths, "Share open documents", true, true)
+        self.share_paths(ctx, paths, "Share open documents", true, true, false)
     }
 
     fn share_open_documents_automatically(&mut self, ctx: &Invocation) -> Result<(), Error> {
@@ -275,7 +280,7 @@ impl CollabPlugin {
             .into_iter()
             .map(|editor| editor.path)
             .collect();
-        self.share_paths(ctx, paths, "Share open documents", true, true)
+        self.share_paths(ctx, paths, "Share open documents", true, true, true)
     }
 
     fn share_paths(
@@ -285,6 +290,7 @@ impl CollabPlugin {
         title: &str,
         allow_empty: bool,
         enable_auto_scope: bool,
+        automatic_invocation: bool,
     ) -> Result<(), Error> {
         self.connect(ctx)?;
         let project = ctx
@@ -294,6 +300,16 @@ impl CollabPlugin {
             .ok_or_else(|| Error::Invalid("Prepare a session first".into()))?;
         let mut pending = Vec::new();
         for path in paths {
+            if automatic_invocation {
+                let Ok(identity) =
+                    realtime::shared_document_identity(&project, &path, session.session_id)
+                else {
+                    continue;
+                };
+                if session.excluded_documents.contains(&identity.document_id) {
+                    continue;
+                }
+            }
             let Ok(shared) = realtime::shared_document(&project, &path, session.session_id) else {
                 continue;
             };
@@ -322,11 +338,13 @@ impl CollabPlugin {
                 "Sharing these documents exceeds the session limit of {limit}; stop sharing some documents first"
             )));
         }
-        let automatic = enable_auto_scope && session.auto_share_open_documents;
+        let automatic = automatic_invocation && session.auto_share_open_documents;
         if !automatic {
-            let future = enable_auto_scope.then_some(
-                "\n\nApprove automatic sharing for future eligible documents you open in this project? Closed files are never scanned.",
-            ).unwrap_or("");
+            let future = if enable_auto_scope {
+                "\n\nApprove automatic sharing for future eligible documents you open in this project? Closed files are never scanned."
+            } else {
+                ""
+            };
             if !host::confirm(
                 title,
                 &format!(
@@ -361,6 +379,11 @@ impl CollabPlugin {
                 return Err(error);
             }
             added.push(shared);
+        }
+        if !automatic_invocation {
+            session
+                .excluded_documents
+                .retain(|id| !added.iter().any(|document| document.document_id == *id));
         }
         session.documents.extend(added.iter().cloned());
         if enable_auto_scope {
@@ -406,6 +429,9 @@ impl CollabPlugin {
             return Ok(());
         }
         let shared = session.documents.remove(index);
+        if !session.excluded_documents.contains(&shared.document_id) {
+            session.excluded_documents.push(shared.document_id);
+        }
         state::store(&session)?;
         if let Some(runtime) = &mut self.realtime
             && let Err(error) = runtime.remove_document(&shared)
@@ -442,16 +468,19 @@ impl Views for CollabPlugin {
         let relay = client::relay_origin().unwrap_or_else(|_| DEFAULT_ORIGIN.into());
         let mut page = View::new(Body::Html(panel::html(
             self.page,
-            session.as_ref().ok().and_then(Option::as_ref),
-            &relay,
-            self.realtime.as_ref().map(|_| status.as_str()),
-            self.panel_error.as_deref(),
-            self.invitation.as_deref(),
-            &self.activity,
-            self.realtime
-                .as_ref()
-                .map(realtime::Realtime::observed_peers)
-                .unwrap_or_default(),
+            panel::PanelState {
+                session: session.as_ref().ok().and_then(Option::as_ref),
+                relay: &relay,
+                realtime_status: self.realtime.as_ref().map(|_| status.as_str()),
+                error: self.panel_error.as_deref(),
+                invitation: self.invitation.as_deref(),
+                activity: &self.activity,
+                observed_peers: self
+                    .realtime
+                    .as_ref()
+                    .map(realtime::Realtime::observed_peers)
+                    .unwrap_or_default(),
+            },
         )));
         if session.is_err() {
             page = page.status("Abra o projeto desta sessão ou use Sair da sessão no painel.");
@@ -521,3 +550,132 @@ impl Views for CollabPlugin {
 // this capability declaration beside the implementation so a future manifest
 // change cannot produce a panel that the host cannot render.
 register_plugin!(CollabPlugin, views);
+
+#[cfg(test)]
+mod sharing_regression_tests {
+    use super::*;
+    use openidea_plugin::{HttpResponse, mock::MockHost};
+    use serde_json::json;
+
+    #[test]
+    fn stopped_document_stays_excluded_when_multiple_editors_are_enumerated() {
+        let mock = MockHost::install().with_capabilities(&[
+            "storage",
+            "secrets",
+            "project.read",
+            "editor.read",
+            "events",
+            "net:collab.synthosia.com",
+        ]);
+        mock.declare_secret("member-credential");
+        mock.open_editor("/project/src/main.rs", "rust", "before stop", &[]);
+        mock.on_fetch(|_| {
+            Ok(HttpResponse {
+                status: 204,
+                headers: vec![],
+                body: vec![],
+            })
+        });
+        let credential = serde_json::from_value(json!({
+            "session_id":"11111111-1111-4111-8111-111111111111",
+            "member_id":"22222222-2222-4222-8222-222222222222",
+            "credential":"A".repeat(43), "role":"owner", "expires_at":9999999999u64,
+            "websocket_url":"wss://collab.synthosia.com/v1/socket"
+        }))
+        .unwrap();
+        state::save(&mock.invocation(), DEFAULT_ORIGIN.into(), credential).unwrap();
+        let mut plugin = CollabPlugin::default();
+        mock.answer_next_prompt(Some(&["yes"]));
+        plugin
+            .run_command("connect-realtime", &mock.invocation(), None)
+            .unwrap();
+        mock.answer_next_prompt(Some(&["yes"]));
+        plugin
+            .run_command("stop-sharing-current-document", &mock.invocation(), None)
+            .unwrap();
+        let socket_count = mock.websockets()[0].sent.len();
+        mock.open_editor(
+            "/project/src/main.rs",
+            "rust",
+            "DO_NOT_SHARE_AFTER_STOP",
+            &[],
+        );
+        plugin.handle_events(
+            &[Event::FileOpened("src/next.rs".into())],
+            &mock.invocation(),
+        );
+        let session = state::load().unwrap().unwrap();
+        assert!(session.auto_share_open_documents);
+        assert!(!session.documents.iter().any(|d| d.path == "src/main.rs"));
+        assert_eq!(mock.websockets()[0].sent.len(), socket_count);
+        mock.open_editor("/project/src/next.rs", "rust", "next contents", &[]);
+        // Model the host returning both the stopped editor and the newly opened one.
+        plugin
+            .share_paths(
+                &mock.invocation(),
+                vec!["/project/src/main.rs".into(), "/project/src/next.rs".into()],
+                "Share open documents",
+                true,
+                true,
+                true,
+            )
+            .unwrap();
+        let session = state::load().unwrap().unwrap();
+        assert!(!session.documents.iter().any(|d| d.path == "src/main.rs"));
+        assert!(session.documents.iter().any(|d| d.path == "src/next.rs"));
+        assert!(mock.websockets()[0].sent.len() > socket_count);
+        assert_eq!(
+            mock.path_subscriptions()["document-changed"],
+            ["src/next.rs"]
+        );
+        let stopped_id = uuid::Uuid::new_v5(&session.session_id, b"src/main.rs");
+        assert!(session.excluded_documents.contains(&stopped_id));
+        assert!(
+            mock.websockets()[0].sent[socket_count..]
+                .iter()
+                .all(|bytes| {
+                    openidea_collab_protocol::Frame::decode(bytes)
+                        .unwrap()
+                        .document
+                        != stopped_id
+                })
+        );
+        // A restart/reconnect must retain the exclusion. A declined explicit
+        // re-share must also leave it intact; a confirmed one clears it.
+        mock.answer_next_prompt(Some(&["yes"]));
+        plugin
+            .run_command("stop-sharing-current-document", &mock.invocation(), None)
+            .unwrap();
+        plugin
+            .run_command("disconnect-realtime", &mock.invocation(), None)
+            .unwrap();
+        mock.open_editor(
+            "/project/src/main.rs",
+            "rust",
+            "DO_NOT_SHARE_AFTER_STOP",
+            &[],
+        );
+        plugin
+            .run_command("share-current-document", &mock.invocation(), None)
+            .unwrap();
+        assert!(
+            state::load()
+                .unwrap()
+                .unwrap()
+                .excluded_documents
+                .contains(&stopped_id)
+        );
+        mock.answer_next_prompt(Some(&["yes"]));
+        plugin
+            .run_command("share-current-document", &mock.invocation(), None)
+            .unwrap();
+        let session = state::load().unwrap().unwrap();
+        assert!(!session.excluded_documents.contains(&stopped_id));
+        assert!(
+            session
+                .documents
+                .iter()
+                .any(|document| document.document_id == stopped_id)
+        );
+    }
+}

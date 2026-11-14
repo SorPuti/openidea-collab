@@ -27,6 +27,8 @@ pub struct Session {
     #[serde(default)]
     pub auto_share_open_documents: bool,
     #[serde(default)]
+    pub excluded_documents: Vec<Uuid>,
+    #[serde(default)]
     pub documents: Vec<SharedDocument>,
 }
 fn root(ctx: &Invocation) -> Result<String, Error> {
@@ -69,6 +71,7 @@ pub fn save(ctx: &Invocation, relay: String, credential: SessionCredential) -> R
         role: credential.role,
         expires_at: credential.expires_at,
         auto_share_open_documents: false,
+        excluded_documents: Vec::new(),
         documents: Vec::new(),
     };
     let json = serde_json::to_string(&session)

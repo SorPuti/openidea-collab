@@ -1,10 +1,10 @@
 id = "sorputi.openidea-collab"
 name = "OpenIDEA Collab"
-version = "0.4.9"
+version = "0.4.10"
 description = "Realtime collaboration for explicitly shared OpenIDEA documents through collab.synthosia.com."
 authors = ["OpenIDEA Collab contributors"]
 license = "MIT"
-change-notes = "Adds the linked collaboration identity, one-time automatic scope for future eligible opened documents, and operational in-panel controls. Remote document application remains disabled pending host no-follow guarantees."
+change-notes = "Preserves stopped-document exclusions during automatic sharing and clarifies source-transmission scope. Remote document application remains disabled."
 categories = ["tools"]
 icon = "icons/collab.svg"
 engines.openidea = "^1.6"
